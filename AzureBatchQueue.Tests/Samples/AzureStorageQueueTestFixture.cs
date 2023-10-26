@@ -1,4 +1,5 @@
 ﻿using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -26,7 +27,7 @@ public class AzureStorageQueueTestFixture
     {
         await queue.DeleteAsync();
     }
-    
+
     [Test]
     public async Task SendMessage()
     {
@@ -42,7 +43,7 @@ public class AzureStorageQueueTestFixture
         await queue.SendMessageAsync("1");
         await queue.SendMessageAsync("2");
         await queue.SendMessageAsync("3");
-        
+
         var messages = (await queue.ReceiveMessagesAsync()).Value;
 
         var messageBody = 1;
@@ -50,20 +51,20 @@ public class AzureStorageQueueTestFixture
         {
             //Process the message, verify the order
             message.Body.ToString().Should().Be($"{messageBody++}");
-            
+
             // Let the service know we're finished with the message and
             // it can be safely deleted.
             await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt);
         }
     }
-    
+
     [Test]
     public async Task ReceiveOnlyRequestedAmount()
     {
         await queue.SendMessageAsync("1");
         await queue.SendMessageAsync("2");
         await queue.SendMessageAsync("3");
-        
+
         var messages = (await queue.ReceiveMessagesAsync(2)).Value;
 
         messages.Length.Should().Be(2);
@@ -78,7 +79,7 @@ public class AzureStorageQueueTestFixture
 
         // update
         await queue.UpdateMessageAsync(original.MessageId, original.PopReceipt, "updated");
-        
+
         // assert body was updated
         var updated = (await queue.ReceiveMessagesAsync()).Value.Single();
         updated.Body.ToString().Should().Be("updated");
