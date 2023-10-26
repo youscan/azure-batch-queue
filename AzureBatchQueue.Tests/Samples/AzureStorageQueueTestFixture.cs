@@ -5,7 +5,7 @@ using NUnit.Framework;
 namespace AzureBatchQueue.Tests.Samples;
 
 [TestFixture]
-public class HelloWorld
+public class AzureStorageQueueTestFixture
 {
     private string connectionString;
     private string queueName;
