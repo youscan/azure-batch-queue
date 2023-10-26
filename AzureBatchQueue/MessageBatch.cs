@@ -8,7 +8,6 @@ public class MessageBatch<T>
 {
     private readonly QueueClient queue;
     private readonly MessageBatchOptions options;
-    private readonly TimeSpan flushTimeout;
     private readonly Timer timer;
     private readonly HashSet<BatchItem<T>> BatchItems;
 
@@ -18,7 +17,7 @@ public class MessageBatch<T>
         this.options = options;
 
         BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
-        timer = new Timer(async _ => await Flush(), null, this.flushTimeout, Timeout.InfiniteTimeSpan);
+        timer = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
     }
 
     private async Task Flush()
