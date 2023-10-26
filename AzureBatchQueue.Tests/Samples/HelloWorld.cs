@@ -38,7 +38,7 @@ public class HelloWorld
         await queue.SendMessageAsync("HelloWorld");
 
         // Verify we uploaded one message
-        Assert.AreEqual(1, (await queue.PeekMessagesAsync()).Value.Length);
+        (await queue.PeekMessagesAsync()).Value.Length.Should().Be(1);
     }
 
     [Test]
