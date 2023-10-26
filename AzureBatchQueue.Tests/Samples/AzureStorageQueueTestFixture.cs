@@ -73,4 +73,19 @@ public class AzureStorageQueueTestFixture
 
         messages.Length.Should().Be(2);
     }
+
+    [Test]
+    public async Task UpdateMessageBody()
+    {
+        // send original
+        await queue.SendMessageAsync("original");
+        var original = (await queue.ReceiveMessagesAsync()).Value.Single();
+
+        // update
+        await queue.UpdateMessageAsync(original.MessageId, original.PopReceipt, "updated");
+        
+        // assert body was updated
+        var updated = (await queue.ReceiveMessagesAsync()).Value.Single();
+        updated.Body.ToString().Should().Be("updated");
+    }
 }
