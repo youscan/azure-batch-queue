@@ -32,10 +32,17 @@ public class MessageBatch<T>
         }
     }
 
-    private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
+    public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
     public string Serialize() => Serialize(BatchItems.Select(x => x.Item));
 
-    public void Complete(Guid id) => BatchItems.RemoveWhere(x => x.Id == id);
+    public async Task Complete(Guid id)
+    {
+        BatchItems.RemoveWhere(x => x.Id == id);
+        if (!BatchItems.Any())
+        {
+            await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+        }
+    }
 
     public BatchItem<T>[] Items() => BatchItems.ToArray();
 }
@@ -53,9 +60,9 @@ public class BatchQueue<T>
         this.flushPeriod = flushPeriod;
     }
 
-    public async Task SendBatch(MessageBatch<T> batch)
+    public async Task SendBatch(IEnumerable<T> items)
     {
-        await queue.SendMessageAsync(batch.Serialize());
+        await queue.SendMessageAsync(MessageBatch<T>.Serialize(items));
     }
 
     public async Task<BatchItem<T>[]> ReceiveBatch()
@@ -85,8 +92,8 @@ public class BatchItem<T>
     private MessageBatch<T> Batch { get; }
     public T Item;
 
-    public void Complete()
+    public async Task Complete()
     {
-        Batch.Complete(Id);
+       await Batch.Complete(Id);
     }
 }
