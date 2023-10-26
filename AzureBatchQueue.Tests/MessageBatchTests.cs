@@ -60,5 +60,20 @@ public class MessageBatchTests
         (await queue.PeekMessagesAsync()).Value.Length.Should().Be(0);
     }
 
+    [Test]
+    public async Task Flush()
+    {
+        await batchQueue.SendBatch(TestItems());
+
+        var batchItems = await batchQueue.ReceiveBatch();
+        batchItems.Length.Should().Be(2);
+        await batchItems.First().Complete();
+
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(1)));
+
+        var updatedBatchItems = await batchQueue.ReceiveBatch();
+        updatedBatchItems.Length.Should().Be(1);
+    }
+
     private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
 }
