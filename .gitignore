@@ -492,3 +492,6 @@ MigrationBackup/
 
 Output/
 .vscode/
+
+__azurite*
+*azurite*
