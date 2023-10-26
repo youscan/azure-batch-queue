@@ -61,4 +61,16 @@ public class HelloWorld
             await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt);
         }
     }
+    
+    [Test]
+    public async Task ReceiveOnlyRequestedAmount()
+    {
+        await queue.SendMessageAsync("1");
+        await queue.SendMessageAsync("2");
+        await queue.SendMessageAsync("3");
+        
+        var messages = (await queue.ReceiveMessagesAsync(2)).Value;
+
+        messages.Length.Should().Be(2);
+    }
 }
