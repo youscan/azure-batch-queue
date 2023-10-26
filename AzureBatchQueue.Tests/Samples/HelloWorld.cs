@@ -1,4 +1,5 @@
 ﻿using Azure.Storage.Queues;
+using FluentAssertions;
 using NUnit.Framework;
 
 namespace AzureBatchQueue.Tests.Samples;
@@ -32,11 +33,32 @@ public class HelloWorld
     }
     
     [Test]
-    public async Task HelloWorld_SendMessage()
+    public async Task SendMessage()
     {
         await queue.SendMessageAsync("HelloWorld");
 
         // Verify we uploaded one message
         Assert.AreEqual(1, (await queue.PeekMessagesAsync()).Value.Length);
+    }
+
+    [Test]
+    public async Task ReceiveMessages()
+    {
+        await queue.SendMessageAsync("1");
+        await queue.SendMessageAsync("2");
+        await queue.SendMessageAsync("3");
+        
+        var messages = (await queue.ReceiveMessagesAsync()).Value;
+
+        var messageBody = 1;
+        foreach (var message in messages)
+        {
+            //Process the message, verify the order
+            message.Body.ToString().Should().Be($"{messageBody++}");
+            
+            // Let the service know we're finished with the message and
+            // it can be safely deleted.
+            await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt);
+        }
     }
 }
