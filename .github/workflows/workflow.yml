@@ -1,0 +1,67 @@
+name: Test and publish
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite
+        ports:
+          - 10000:10000
+          - 10001:10001
+        # No simple receipt to curl it, so let's just wait
+        options: >-
+          --health-cmd "sleep 5"
+          --health-interval 3s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "7"
+      - name: Install dependencies
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+      - name: Test
+        if: ${{ !env.ACT }}
+        run: |
+          dotnet test --no-restore --no-build \
+            --configuration Release \
+            --logger trx\;LogFileName=${{ github.workspace }}/TestResults/AzureBatchQueue.Tests.trx \
+            --logger console \
+              AzureBatchQueue.Tests
+      - name: Tests Report
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: "Tests"
+          path: "${{ github.workspace }}/TestResults/*.trx"
+          reporter: "dotnet-trx"
+      - name: Get tag name
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        id: vars
+        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/v}
+      - name: Build packages
+        if: steps.vars.outputs.tag != null
+        run: |
+          dotnet pack --no-restore --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg -p:PackageVersion=${{ steps.vars.outputs.tag }} -o output/${{ steps.vars.outputs.tag }} AzureBatchQueue/
+          dotnet pack --no-restore --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg -p:PackageVersion=${{ steps.vars.outputs.tag }} -o output/${{ steps.vars.outputs.tag }} AzureBatchQueue.JsonNet/
+      - name: Push packages
+        if: steps.vars.outputs.tag != null
+        run: dotnet nuget push output/${{ steps.vars.outputs.tag }}/*.nupkg --api-key ${{ secrets.NUGET_API_TOKEN }} --source https://api.nuget.org/v3/index.json
+      - name: Create release
+        if: steps.vars.outputs.tag != null
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            output/${{ steps.vars.outputs.tag }}/*.nupkg
+          generate_release_notes: true
+          # TODO: Determine the prerelease versions using the NuGet convention https://learn.microsoft.com/en-us/nuget/create-packages/prerelease-packages
+          prerelease: false
+          draft: false
