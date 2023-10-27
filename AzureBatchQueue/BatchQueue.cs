@@ -22,6 +22,10 @@ public class BatchQueue<T>
     public async Task<BatchItem<T>[]> ReceiveBatch()
     {
         var msg = await queue.ReceiveMessageAsync();
+
+        if (msg.Value == null)
+            return Array.Empty<BatchItem<T>>();
+
         var items = Deserialize<T>(msg.Value);
         var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod);
 

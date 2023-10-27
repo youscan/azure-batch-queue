@@ -8,7 +8,7 @@ namespace AzureBatchQueue.Tests;
 public class MessageBatchTests
 {
     private record TestItem(string Name, int Age);
-    TimeSpan flushPeriod = TimeSpan.FromSeconds(1);
+    TimeSpan flushPeriod = TimeSpan.FromSeconds(3);
 
     private QueueClient queue;
     private BatchQueue<TestItem> batchQueue;
@@ -74,6 +74,24 @@ public class MessageBatchTests
 
         var remainingItems = await batchQueue.ReceiveBatch();
         remainingItems.Length.Should().Be(1);
+    }
+
+    [Test]
+    public async Task LeaseBatchWhileProcessing()
+    {
+        await batchQueue.SendBatch(TestItems());
+
+        var batchItems = await batchQueue.ReceiveBatch();
+        var batchItems2 = await batchQueue.ReceiveBatch();
+
+        batchItems.Length.Should().Be(2);
+        batchItems2.Length.Should().Be(0);
+
+        // do not complete any messages, and wait for the batch to return to the queue
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+
+        var batchItems3 = await batchQueue.ReceiveBatch();
+        batchItems3.Length.Should().Be(2);
     }
 
     private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
