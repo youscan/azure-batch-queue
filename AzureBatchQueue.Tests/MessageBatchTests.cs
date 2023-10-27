@@ -21,9 +21,9 @@ public class MessageBatchTests
     }
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        queue.CreateAsync();
+        await queue.CreateAsync();
     }
 
     [TearDown]
