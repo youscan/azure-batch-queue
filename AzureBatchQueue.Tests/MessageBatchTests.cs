@@ -7,8 +7,8 @@ namespace AzureBatchQueue.Tests;
 [TestFixture]
 public class MessageBatchTests
 {
-    record TestItem(string Name, int Age);
-    TimeSpan flushPeriod = TimeSpan.FromSeconds(5);
+    private record TestItem(string Name, int Age);
+    TimeSpan flushPeriod = TimeSpan.FromSeconds(1);
 
     private QueueClient queue;
     private BatchQueue<TestItem> batchQueue;
@@ -61,7 +61,7 @@ public class MessageBatchTests
     }
 
     [Test]
-    public async Task Flush()
+    public async Task FlushOnTimeout()
     {
         await batchQueue.SendBatch(TestItems());
 
@@ -69,10 +69,11 @@ public class MessageBatchTests
         batchItems.Length.Should().Be(2);
         await batchItems.First().Complete();
 
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(1)));
+        // wait longer than flush period for the whole batch
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(0.5)));
 
-        var updatedBatchItems = await batchQueue.ReceiveBatch();
-        updatedBatchItems.Length.Should().Be(1);
+        var remainingItems = await batchQueue.ReceiveBatch();
+        remainingItems.Length.Should().Be(1);
     }
 
     private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
