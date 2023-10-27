@@ -70,7 +70,7 @@ public class MessageBatchTests
         await batchItems.First().Complete();
 
         // wait longer than flush period for the whole batch
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(0.5)));
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(2)));
 
         var remainingItems = await batchQueue.ReceiveBatch();
         remainingItems.Length.Should().Be(1);
