@@ -7,7 +7,6 @@ public class MessageBatch<T>
 {
     private readonly QueueClient queue;
     private readonly MessageBatchOptions options;
-    private readonly Timer timer;
     private readonly HashSet<BatchItem<T>> BatchItems;
 
     public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
@@ -16,7 +15,7 @@ public class MessageBatch<T>
         this.options = options;
 
         BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
-        timer = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
+        var _ = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
     }
 
     private async Task Flush()
@@ -27,7 +26,7 @@ public class MessageBatch<T>
         }
         else
         {
-            await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize(BatchItems.Select(x => x.Item)));
+            await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
         }
     }
 
