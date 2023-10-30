@@ -21,6 +21,8 @@ public class MessageBatch<T>
 
     private async Task Flush()
     {
+        await timer.DisposeAsync();
+
         try
         {
             if (!BatchItems.Any())
@@ -32,10 +34,6 @@ public class MessageBatch<T>
         {
             // log missing queue message
         }
-        finally
-        {
-            await DisposeTimer();
-        }
     }
 
     public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
@@ -46,12 +44,9 @@ public class MessageBatch<T>
         BatchItems.RemoveWhere(x => x.Id == id);
         if (!BatchItems.Any())
         {
-            await DisposeTimer();
-            await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+            timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
         }
     }
-
-    public async Task DisposeTimer() => await timer.DisposeAsync();
 
     public BatchItem<T>[] Items() => BatchItems.ToArray();
 }
