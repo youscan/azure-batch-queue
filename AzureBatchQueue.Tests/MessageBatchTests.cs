@@ -8,7 +8,7 @@ namespace AzureBatchQueue.Tests;
 public class MessageBatchTests
 {
     private record TestItem(string Name, int Age);
-    TimeSpan flushPeriod = TimeSpan.FromSeconds(3);
+    TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
 
     private QueueClient queue;
     private BatchQueue<TestItem> batchQueue;
@@ -70,7 +70,7 @@ public class MessageBatchTests
         await batchItems.First().Complete();
 
         // wait longer than flush period for the whole batch
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromSeconds(2)));
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
 
         var remainingItems = await batchQueue.ReceiveBatch();
         remainingItems.Length.Should().Be(1);
