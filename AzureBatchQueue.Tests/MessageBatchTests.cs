@@ -61,6 +61,20 @@ public class MessageBatchTests
     }
 
     [Test]
+    public async Task CompleteAfterCompletion()
+    {
+        await batchQueue.SendBatch(TestItems());
+        var batchItems = await batchQueue.ReceiveBatch();
+
+        // complete whole batch
+        foreach (var batchItem in batchItems)
+            await batchItem.Complete();
+
+        // complete already flushed message
+         Assert.ThrowsAsync<MessageBatchCompletedException>(async () => await batchItems.First().Complete());
+    }
+
+    [Test]
     public async Task FlushOnTimeout()
     {
         await batchQueue.SendBatch(TestItems());

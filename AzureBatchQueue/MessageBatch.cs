@@ -8,7 +8,9 @@ public class MessageBatch<T>
     private readonly QueueClient queue;
     private readonly MessageBatchOptions options;
     private readonly HashSet<BatchItem<T>> BatchItems;
+
     private readonly Timer timer;
+    private bool completed = false;
 
     public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
     {
@@ -21,6 +23,7 @@ public class MessageBatch<T>
 
     private async Task Flush()
     {
+        completed = true;
         await timer.DisposeAsync();
 
         try
@@ -44,7 +47,17 @@ public class MessageBatch<T>
         BatchItems.RemoveWhere(x => x.Id == id);
         if (!BatchItems.Any())
         {
-            timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
+            if (completed)
+                throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
+
+            try
+            {
+                timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+                throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
+            }
         }
     }
 
