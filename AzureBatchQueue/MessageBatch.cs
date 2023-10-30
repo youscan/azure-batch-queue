@@ -8,6 +8,7 @@ public class MessageBatch<T>
     private readonly QueueClient queue;
     private readonly MessageBatchOptions options;
     private readonly HashSet<BatchItem<T>> BatchItems;
+    private readonly Timer timer;
 
     public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
     {
@@ -15,19 +16,17 @@ public class MessageBatch<T>
         this.options = options;
 
         BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
-        var _ = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
+        timer = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
     }
 
     private async Task Flush()
     {
         if (!BatchItems.Any())
-        {
             await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
-        }
         else
-        {
             await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
-        }
+
+        await DisposeTimer();
     }
 
     public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
@@ -38,9 +37,12 @@ public class MessageBatch<T>
         BatchItems.RemoveWhere(x => x.Id == id);
         if (!BatchItems.Any())
         {
+            await DisposeTimer();
             await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
         }
     }
+
+    public async Task DisposeTimer() => await timer.DisposeAsync();
 
     public BatchItem<T>[] Items() => BatchItems.ToArray();
 }
