@@ -21,12 +21,21 @@ public class MessageBatch<T>
 
     private async Task Flush()
     {
-        if (!BatchItems.Any())
-            await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
-        else
-            await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
-
-        await DisposeTimer();
+        try
+        {
+            if (!BatchItems.Any())
+                await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+            else
+                await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
+        }
+        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
+        {
+            // log missing queue message
+        }
+        finally
+        {
+            await DisposeTimer();
+        }
     }
 
     public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
