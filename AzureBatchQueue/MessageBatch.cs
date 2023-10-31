@@ -42,23 +42,24 @@ public class MessageBatch<T>
     public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
     public string Serialize() => Serialize(BatchItems.Select(x => x.Item));
 
-    public async Task Complete(Guid id)
+    public Task Complete(Guid id)
     {
         BatchItems.RemoveWhere(x => x.Id == id);
-        if (!BatchItems.Any())
-        {
-            if (completed)
-                throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
+        if (BatchItems.Any()) return Task.CompletedTask;
 
-            try
-            {
-                timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
-            }
-            catch (ObjectDisposedException)
-            {
-                throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
-            }
+        if (completed)
+            throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
+
+        try
+        {
+            timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
         }
+        catch (ObjectDisposedException)
+        {
+            throw new MessageBatchCompletedException($"MessageBatch {options.MessageId} is already completed;");
+        }
+
+        return Task.CompletedTask;
     }
 
     public BatchItem<T>[] Items() => BatchItems.ToArray();
