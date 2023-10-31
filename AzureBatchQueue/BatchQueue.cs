@@ -18,7 +18,16 @@ public class BatchQueue<T>
 
     public async Task SendBatch(IEnumerable<T> items)
     {
-        await queue.SendMessageAsync(MessageBatch<T>.Serialize(items));
+        try
+        {
+            await queue.SendMessageAsync(MessageBatch<T>.Serialize(items));
+        }
+        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "RequestBodyTooLarge")
+        {
+            // log overflow
+
+            throw new MessageTooLargeException("The request body is too large and exceeds the maximum permissible limit.", ex);
+        }
     }
 
     public async Task<BatchItem<T>[]> ReceiveBatch()
