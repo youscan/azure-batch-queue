@@ -1,4 +1,3 @@
-using Azure.Storage.Queues;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -10,34 +9,26 @@ public class BatchQueueTests
     private record TestItem(string Name, int Age);
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
 
-    private QueueClient queue;
     private BatchQueue<TestItem> batchQueue;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
-        queue = new QueueClient("UseDevelopmentStorage=true", "hello-world-queue");
-        batchQueue = new BatchQueue<TestItem>(queue, flushPeriod: flushPeriod);
+        batchQueue = new BatchQueue<TestItem>("UseDevelopmentStorage=true", "hello-world-queue", flushPeriod: flushPeriod);
     }
 
     [SetUp]
-    public async Task SetUp()
-    {
-        await queue.CreateAsync();
-    }
+    public async Task SetUp() => await batchQueue.Create();
 
     [TearDown]
-    public async Task TearDown()
-    {
-        await queue.DeleteAsync();
-    }
+    public async Task TearDown() => await batchQueue.Delete();
 
     [Test]
     public async Task SendBatch()
     {
         await batchQueue.SendBatch(TestItems());
 
-        (await queue.PeekMessagesAsync()).Value.Length.Should().Be(1);
+        (await batchQueue.ReceiveBatch()).Length.Should().Be(2);
     }
 
     [Test]
@@ -57,7 +48,7 @@ public class BatchQueueTests
         var batchItems = await batchQueue.ReceiveBatch();
         foreach (var batchItem in batchItems) await batchItem.Complete();
 
-        (await queue.PeekMessagesAsync()).Value.Length.Should().Be(0);
+        (await batchQueue.ReceiveBatch()).Length.Should().Be(0);
     }
 
     [Test]
@@ -107,6 +98,5 @@ public class BatchQueueTests
         var batchItems3 = await batchQueue.ReceiveBatch();
         batchItems3.Length.Should().Be(2);
     }
-
     private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
 }

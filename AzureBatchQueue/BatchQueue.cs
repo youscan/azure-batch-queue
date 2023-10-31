@@ -8,9 +8,9 @@ public class BatchQueue<T>
     private readonly QueueClient queue;
     private readonly TimeSpan flushPeriod;
 
-    public BatchQueue(QueueClient queue, TimeSpan flushPeriod)
+    public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod)
     {
-        this.queue = queue;
+        queue = new QueueClient(connectionString, queueName);
         this.flushPeriod = flushPeriod;
     }
 
@@ -35,4 +35,7 @@ public class BatchQueue<T>
     }
 
     private static IEnumerable<T> Deserialize<T>(QueueMessage value) => value.Body.ToObjectFromJson<T[]>();
+
+    public async Task Create() => await queue.CreateAsync();
+    public async Task Delete() => await queue.DeleteAsync();
 }
