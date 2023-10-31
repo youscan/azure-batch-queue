@@ -5,7 +5,7 @@ using NUnit.Framework;
 namespace AzureBatchQueue.Tests;
 
 [TestFixture]
-public class MessageBatchTests
+public class BatchQueueTests
 {
     private record TestItem(string Name, int Age);
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
