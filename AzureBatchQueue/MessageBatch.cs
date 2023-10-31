@@ -13,7 +13,7 @@ public class MessageBatch<T>
     private readonly Timer timer;
     private bool completed = false;
 
-    public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
+    public MessageBatch(QueueClient queue, IEnumerable<T>? items, MessageBatchOptions options)
     {
         this.queue = queue;
         this.options = options;
@@ -40,9 +40,7 @@ public class MessageBatch<T>
         }
     }
 
-    private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
-    private string Serialize() => Compress(BatchItems.Select(x => x.Item));
-    public static string Compress(IEnumerable<T> items) => StringCompression.Compress(Serialize(items));
+    private string Serialize() => SerializedMessageBatch<T>.Serialize(BatchItems.Select(x => x.Item), options.Compressed);
 
     public Task Complete(Guid id)
     {
@@ -67,4 +65,4 @@ public class MessageBatch<T>
     public BatchItem<T>[] Items() => BatchItems.ToArray();
 }
 
-public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod);
+public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, bool Compressed);

@@ -18,11 +18,11 @@ public class BatchQueue<T>
         visibilityTimeout = this.flushPeriod.Add(TimeSpan.FromSeconds(5));
     }
 
-    public async Task SendBatch(IEnumerable<T> items)
+    public async Task SendBatch(IEnumerable<T> items, bool compress = true)
     {
         try
         {
-            await queue.SendMessageAsync(MessageBatch<T>.Compress(items));
+            await queue.SendMessageAsync(SerializedMessageBatch<T>.Serialize(items, compress));
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "RequestBodyTooLarge")
         {
@@ -36,23 +36,15 @@ public class BatchQueue<T>
     {
         var msg = await queue.ReceiveMessageAsync(visibilityTimeout);
 
-        if (msg.Value == null)
+        if (msg.Value?.Body == null)
             return Array.Empty<BatchItem<T>>();
 
-        var items = DeserializeCompressed(msg.Value);
-        var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod);
+        var serializedBatch = SerializedMessageBatch<T>.Deserialize(msg.Value.Body.ToString());
+        var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod, serializedBatch.Compressed);
 
-        var batch = new MessageBatch<T>(queue, items, batchOptions);
+        var batch = new MessageBatch<T>(queue, serializedBatch.Items(), batchOptions);
 
         return batch.Items();
-    }
-
-    private static IEnumerable<T> Deserialize(QueueMessage value) => value.Body.ToObjectFromJson<T[]>();
-    private static IEnumerable<T>? DeserializeCompressed(QueueMessage value)
-    {
-        var decompressed = StringCompression.Decompress(value.Body.ToString());
-
-        return JsonConvert.DeserializeObject<T[]>(decompressed);
     }
 
     public async Task Create() => await queue.CreateAsync();

@@ -98,5 +98,31 @@ public class BatchQueueTests
         var batchItems3 = await batchQueue.ReceiveBatch();
         batchItems3.Length.Should().Be(2);
     }
+
+    [Test]
+    public async Task HandleCompressedAndUncompressedMessages()
+    {
+        await batchQueue.SendBatch(TestItems(), compress: true);
+        await batchQueue.SendBatch(TestItems(), compress: false);
+
+        var batchItems = await batchQueue.ReceiveBatch();
+        var batchItems2 = await batchQueue.ReceiveBatch();
+
+        batchItems.Length.Should().Be(2);
+        batchItems2.Length.Should().Be(2);
+
+        await batchItems.First().Complete();
+        await batchItems2.First().Complete();
+
+        // wait longer than flush period for the whole batch
+        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+
+        var batchItems1Updated = await batchQueue.ReceiveBatch();
+        var batchItems2Updated = await batchQueue.ReceiveBatch();
+        batchItems1Updated.Length.Should().Be(1);
+        batchItems2Updated.Length.Should().Be(1);
+
+    }
+
     private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
 }

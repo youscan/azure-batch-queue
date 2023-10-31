@@ -6,7 +6,7 @@ namespace AzureBatchQueue.Tests;
 public class BatchMessageSizeTests
 {
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
-    private const int MaxAllowedMessageSizeInBytes = 49_149; // ~ 48 KB
+    private const int MaxAllowedMessageSizeInBytes = 49_119; // ~ 48 KB
 
     private BatchQueue<byte[]> batchQueue;
 
@@ -27,7 +27,7 @@ public class BatchMessageSizeTests
     {
         var message = MessageOfSize(MaxAllowedMessageSizeInBytes);
 
-        await batchQueue.SendBatch(message);
+        await batchQueue.SendBatch(message, compress: false);
     }
 
     [Test]
@@ -35,7 +35,7 @@ public class BatchMessageSizeTests
     {
         var message = MessageOfSize(MaxAllowedMessageSizeInBytes + 1);
 
-        Assert.ThrowsAsync<MessageTooLargeException>(async () => await batchQueue.SendBatch(message));
+        Assert.ThrowsAsync<MessageTooLargeException>(async () => await batchQueue.SendBatch(message, compress: false));
 
         return Task.CompletedTask;
     }
