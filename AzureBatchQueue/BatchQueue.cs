@@ -7,11 +7,13 @@ public class BatchQueue<T>
 {
     private readonly QueueClient queue;
     private readonly TimeSpan flushPeriod;
+    private readonly TimeSpan visibilityTimeout;
 
     public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod)
     {
         queue = new QueueClient(connectionString, queueName);
         this.flushPeriod = flushPeriod;
+        visibilityTimeout = this.flushPeriod.Add(TimeSpan.FromSeconds(5));
     }
 
     public async Task SendBatch(IEnumerable<T> items)
@@ -21,7 +23,7 @@ public class BatchQueue<T>
 
     public async Task<BatchItem<T>[]> ReceiveBatch()
     {
-        var msg = await queue.ReceiveMessageAsync();
+        var msg = await queue.ReceiveMessageAsync(visibilityTimeout);
 
         if (msg.Value == null)
             return Array.Empty<BatchItem<T>>();
