@@ -1,5 +1,7 @@
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
+using AzureBatchQueue.Utils;
+using Newtonsoft.Json;
 
 namespace AzureBatchQueue;
 
@@ -20,7 +22,7 @@ public class BatchQueue<T>
     {
         try
         {
-            await queue.SendMessageAsync(MessageBatch<T>.Serialize(items));
+            await queue.SendMessageAsync(MessageBatch<T>.Compress(items));
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "RequestBodyTooLarge")
         {
@@ -37,7 +39,7 @@ public class BatchQueue<T>
         if (msg.Value == null)
             return Array.Empty<BatchItem<T>>();
 
-        var items = Deserialize<T>(msg.Value);
+        var items = DeserializeCompressed(msg.Value);
         var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod);
 
         var batch = new MessageBatch<T>(queue, items, batchOptions);
@@ -45,7 +47,13 @@ public class BatchQueue<T>
         return batch.Items();
     }
 
-    private static IEnumerable<T> Deserialize<T>(QueueMessage value) => value.Body.ToObjectFromJson<T[]>();
+    private static IEnumerable<T> Deserialize(QueueMessage value) => value.Body.ToObjectFromJson<T[]>();
+    private static IEnumerable<T>? DeserializeCompressed(QueueMessage value)
+    {
+        var decompressed = StringCompression.Decompress(value.Body.ToString());
+
+        return JsonConvert.DeserializeObject<T[]>(decompressed);
+    }
 
     public async Task Create() => await queue.CreateAsync();
     public async Task Delete() => await queue.DeleteAsync();

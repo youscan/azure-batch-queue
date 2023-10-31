@@ -1,4 +1,5 @@
 ﻿using Azure.Storage.Queues;
+using AzureBatchQueue.Utils;
 using Newtonsoft.Json;
 
 namespace AzureBatchQueue;
@@ -39,8 +40,9 @@ public class MessageBatch<T>
         }
     }
 
-    public static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
-    public string Serialize() => Serialize(BatchItems.Select(x => x.Item));
+    private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
+    private string Serialize() => Compress(BatchItems.Select(x => x.Item));
+    public static string Compress(IEnumerable<T> items) => StringCompression.Compress(Serialize(items));
 
     public Task Complete(Guid id)
     {
