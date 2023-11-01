@@ -15,11 +15,11 @@ public class BatchQueue<T>
         visibilityTimeout = this.flushPeriod.Add(TimeSpan.FromSeconds(5));
     }
 
-    public async Task SendBatch(MessageBatch<T> batch, bool compress = true)
+    public async Task SendBatch(MessageBatch<T> batch)
     {
         try
         {
-            await queue.SendMessageAsync(SerializedMessageBatch<T>.Serialize(batch.Items(), compress));
+            await queue.SendMessageAsync(batch.Serialize());
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "RequestBodyTooLarge")
         {
@@ -36,7 +36,7 @@ public class BatchQueue<T>
         if (msg.Value?.Body == null)
             return Array.Empty<BatchItem<T>>();
 
-        var serializedBatch = SerializedMessageBatch<T>.Deserialize(msg.Value.Body.ToString());
+        var serializedBatch = MessageBatch<T>.Deserialize(msg.Value.Body.ToString());
         var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod, serializedBatch.Compressed);
 
         var batch = new QueueMessageBatch<T>(queue, serializedBatch.Items(), batchOptions);

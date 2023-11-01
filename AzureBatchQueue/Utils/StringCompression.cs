@@ -9,7 +9,15 @@ public static class StringCompression
     /// Compresses a string and returns a Gzip compressed, Base64 encoded string.
     /// </summary>
     /// <param name="uncompressedString">String to compress</param>
-    public static string Compress(string jsonData)
+    public static string CompressToBase64(string jsonData)
+    {
+        var compressedData = Compress(jsonData);
+        var base64String = Convert.ToBase64String(compressedData);
+
+        return base64String;
+    }
+
+    public static byte[] Compress(string jsonData)
     {
         var dataBytes = Encoding.UTF8.GetBytes(jsonData);
 
@@ -19,10 +27,7 @@ public static class StringCompression
             gzipStream.Write(dataBytes, 0, dataBytes.Length);
         }
 
-        var compressedData = memoryStream.ToArray();
-        var base64String = Convert.ToBase64String(compressedData);
-
-        return base64String;
+        return memoryStream.ToArray();
     }
 
     public static string Decompress(byte[] bytes) => DecompressInternal(bytes);

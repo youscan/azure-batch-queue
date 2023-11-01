@@ -25,24 +25,24 @@ public class BatchMessageSizeTests
     [Test]
     public async Task SendMessageWithMaxAllowedSize()
     {
-        var message = BatchOfSize(MaxAllowedMessageSizeInBytes);
+        var message = BatchOfSize(MaxAllowedMessageSizeInBytes, compress: false);
 
-        await batchQueue.SendBatch(message, compress: false);
+        await batchQueue.SendBatch(message);
     }
 
     [Test]
     public Task ThrowsExceptionWhenMessageIsTooLarge()
     {
-        var message = BatchOfSize(MaxAllowedMessageSizeInBytes + 1);
+        var message = BatchOfSize(MaxAllowedMessageSizeInBytes + 1, compress: false);
 
-        Assert.ThrowsAsync<MessageTooLargeException>(async () => await batchQueue.SendBatch(message, compress: false));
+        Assert.ThrowsAsync<MessageTooLargeException>(async () => await batchQueue.SendBatch(message));
 
         return Task.CompletedTask;
     }
 
-    private static MessageBatch<byte[]> BatchOfSize(int bytes)
+    private static MessageBatch<byte[]> BatchOfSize(int bytes, bool compress)
     {
-        var batch = new MessageBatch<byte[]>();
+        var batch = new MessageBatch<byte[]>(compress);
         batch.TryAdd(new byte[bytes]);
 
         return batch;

@@ -42,7 +42,7 @@ public class QueueMessageBatch<T>
         }
     }
 
-    private string Serialize() => SerializedMessageBatch<T>.Serialize(BatchItems.Select(x => x.Item), options.Compressed);
+    private string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.Compressed).Serialize();
 
     public Task Complete(Guid id)
     {
