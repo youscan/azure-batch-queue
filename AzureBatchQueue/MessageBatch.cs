@@ -14,20 +14,28 @@ public class MessageBatch<T>
     private readonly List<T> items = new();
     public List<T> Items() => items;
 
-    private const int MaxSizeInBytes = 49_000; // ~ 48 KB
+    [IgnoreDataMember]
+    private int MaxSizeInBytes { get; init; }
+    public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
 
     public MessageBatch() { }
-    public MessageBatch(bool compressed) => Compressed = compressed;
+    public MessageBatch(bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
+    {
+        Compressed = compressed;
+        MaxSizeInBytes = maxSizeInBytes;
+    }
 
     /// <summary>
     /// Use this ctor if you are sure that all items will fit into the batch
     /// </summary>
     /// <param name="items"></param>
     /// <param name="compressed"></param>
-    public MessageBatch(List<T> items, bool compressed)
+    /// <param name="maxSizeInBytes"></param>
+    public MessageBatch(List<T> items, bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
     {
         Compressed = compressed;
         this.items = items;
+        MaxSizeInBytes = maxSizeInBytes;
     }
 
     public bool TryAdd(T item)
