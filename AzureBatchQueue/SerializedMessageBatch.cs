@@ -31,6 +31,10 @@ public class SerializedMessageBatch<T>
     {
         var data = JsonConvert.DeserializeObject<SerializedMessageBatch<T>>(json);
 
+        if (data == null)
+            throw new SerializationException(
+                $"Could not deserialize json into object of type {nameof(SerializedMessageBatch<T>)}");
+
         var body = data.Compressed ? StringCompression.Decompress(data.Body) : data.Body;
 
         return new SerializedMessageBatch<T> { Compressed = data.Compressed, Body = body };

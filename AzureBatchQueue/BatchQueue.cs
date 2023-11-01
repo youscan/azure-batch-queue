@@ -1,7 +1,4 @@
 using Azure.Storage.Queues;
-using Azure.Storage.Queues.Models;
-using AzureBatchQueue.Utils;
-using Newtonsoft.Json;
 
 namespace AzureBatchQueue;
 

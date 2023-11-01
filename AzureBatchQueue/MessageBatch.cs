@@ -1,6 +1,4 @@
 ﻿using Azure.Storage.Queues;
-using AzureBatchQueue.Utils;
-using Newtonsoft.Json;
 
 namespace AzureBatchQueue;
 
@@ -13,7 +11,7 @@ public class MessageBatch<T>
     private readonly Timer timer;
     private bool completed = false;
 
-    public MessageBatch(QueueClient queue, IEnumerable<T>? items, MessageBatchOptions options)
+    public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
     {
         this.queue = queue;
         this.options = options;
