@@ -44,6 +44,6 @@ public class BatchQueue<T>
         return batch.Unpack();
     }
 
-    public async Task Create() => await queue.CreateAsync();
+    public async Task CreateIfNotExists(CancellationToken ct = default) => await queue.CreateIfNotExistsAsync(null, ct);
     public async Task Delete() => await queue.DeleteAsync();
 }

@@ -17,7 +17,7 @@ public class BatchMessageSizeTests
     }
 
     [SetUp]
-    public async Task SetUp() => await batchQueue.Create();
+    public async Task SetUp() => await batchQueue.CreateIfNotExists();
 
     [TearDown]
     public async Task TearDown() => await batchQueue.Delete();
