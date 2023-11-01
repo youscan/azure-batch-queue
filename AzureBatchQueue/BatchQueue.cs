@@ -41,7 +41,7 @@ public class BatchQueue<T>
 
         var batch = new MessageBatch<T>(queue, serializedBatch.Items(), batchOptions);
 
-        return batch.Items();
+        return batch.Unpack();
     }
 
     public async Task Create() => await queue.CreateAsync();

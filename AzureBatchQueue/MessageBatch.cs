@@ -17,7 +17,7 @@ public class MessageBatch<T>
         this.options = options;
 
         BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
-        timer = new Timer(async _ => await Flush(), null, options.FlushPeriod, Timeout.InfiniteTimeSpan);
+        timer = new Timer(async _ => await Flush());
     }
 
     private async Task Flush()
@@ -60,7 +60,15 @@ public class MessageBatch<T>
         return Task.CompletedTask;
     }
 
-    public BatchItem<T>[] Items() => BatchItems.ToArray();
+    /// <summary>
+    /// Triggers the timer with flushPeriod from batch options.
+    /// </summary>
+    /// <returns></returns>
+    public BatchItem<T>[] Unpack()
+    {
+        timer.Change(options.FlushPeriod, Timeout.InfiniteTimeSpan);
+        return BatchItems.ToArray();
+    }
 }
 
 public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, bool Compressed);
