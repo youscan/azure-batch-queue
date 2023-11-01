@@ -15,11 +15,11 @@ public class BatchQueue<T>
         visibilityTimeout = this.flushPeriod.Add(TimeSpan.FromSeconds(5));
     }
 
-    public async Task SendBatch(IEnumerable<T> items, bool compress = true)
+    public async Task SendBatch(MessageBatch<T> batch, bool compress = true)
     {
         try
         {
-            await queue.SendMessageAsync(SerializedMessageBatch<T>.Serialize(items, compress));
+            await queue.SendMessageAsync(SerializedMessageBatch<T>.Serialize(batch.Items(), compress));
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "RequestBodyTooLarge")
         {

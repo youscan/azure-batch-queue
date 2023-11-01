@@ -26,7 +26,7 @@ public class BatchQueueTests
     [Test]
     public async Task SendBatch()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
 
         (await batchQueue.ReceiveBatch()).Length.Should().Be(2);
     }
@@ -34,7 +34,7 @@ public class BatchQueueTests
     [Test]
     public async Task ReceiveBatch()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Select(x => x.Id).All(id => id != Guid.Empty).Should().BeTrue();
@@ -43,7 +43,7 @@ public class BatchQueueTests
     [Test]
     public async Task Complete()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         foreach (var batchItem in batchItems) await batchItem.Complete();
@@ -54,7 +54,7 @@ public class BatchQueueTests
     [Test]
     public async Task CompleteAfterCompletion()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
         var batchItems = await batchQueue.ReceiveBatch();
 
         // complete whole batch
@@ -68,7 +68,7 @@ public class BatchQueueTests
     [Test]
     public async Task FlushOnTimeout()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Length.Should().Be(2);
@@ -84,7 +84,7 @@ public class BatchQueueTests
     [Test]
     public async Task LeaseBatchWhileProcessing()
     {
-        await batchQueue.SendBatch(TestItems());
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -102,8 +102,8 @@ public class BatchQueueTests
     [Test]
     public async Task HandleCompressedAndUncompressedMessages()
     {
-        await batchQueue.SendBatch(TestItems(), compress: true);
-        await batchQueue.SendBatch(TestItems(), compress: false);
+        await batchQueue.SendBatch(Batch(), compress: true);
+        await batchQueue.SendBatch(Batch(), compress: false);
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -121,8 +121,19 @@ public class BatchQueueTests
         var batchItems2Updated = await batchQueue.ReceiveBatch();
         batchItems1Updated.Length.Should().Be(1);
         batchItems2Updated.Length.Should().Be(1);
-
     }
 
-    private static IEnumerable<TestItem> TestItems() => new [] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
+    private static MessageBatch<TestItem> Batch()
+    {
+        var batch = new MessageBatch<TestItem>();
+        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
+
+        foreach (var item in items)
+        {
+            if (!batch.TryAdd(item))
+                return batch;
+        }
+
+        return batch;
+    }
 }
