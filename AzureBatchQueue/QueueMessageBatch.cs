@@ -2,7 +2,11 @@
 
 namespace AzureBatchQueue;
 
-public class MessageBatch<T>
+/// <summary>
+/// Internal class that only BatchQueue works with. It has a timer to flush all completed items on flushPeriod time.
+/// </summary>
+/// <typeparam name="T"></typeparam>
+public class QueueMessageBatch<T>
 {
     private readonly QueueClient queue;
     private readonly MessageBatchOptions options;
@@ -11,7 +15,7 @@ public class MessageBatch<T>
     private readonly Timer timer;
     private bool completed = false;
 
-    public MessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
+    public QueueMessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
     {
         this.queue = queue;
         this.options = options;
