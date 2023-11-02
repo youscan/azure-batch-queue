@@ -45,7 +45,7 @@ public class Sender
         if (words == null || words.Count == 0)
             return ArraySegment<MessageBatch<string>>.Empty;
 
-        var batches = new List<MessageBatch<string>> { new(true, maxBatchSizeInBytes) };
+        var batches = new List<MessageBatch<string>> { new(false, maxBatchSizeInBytes) };
 
         for (var i = 0; i < words.Count;)
         {
@@ -61,7 +61,7 @@ public class Sender
                 throw new Exception($"Word {words[i]} is too large to fit in the batch");
 
             // add new batch
-            batches.Add(new MessageBatch<string>(true, maxBatchSizeInBytes));
+            batches.Add(new MessageBatch<string>(false, maxBatchSizeInBytes));
         }
 
         return batches;
