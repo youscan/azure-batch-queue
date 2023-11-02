@@ -1,4 +1,6 @@
 ﻿using Azure.Storage.Queues;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AzureBatchQueue;
 
@@ -14,11 +16,13 @@ public class QueueMessageBatch<T>
 
     private readonly Timer timer;
     private bool completed = false;
+    private readonly ILogger<BatchQueue<T>> logger;
 
-    public QueueMessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options)
+    public QueueMessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options, ILogger<BatchQueue<T>>? logger = null)
     {
         this.queue = queue;
         this.options = options;
+        this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
 
         BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
         timer = new Timer(async _ => await Flush());
@@ -32,13 +36,19 @@ public class QueueMessageBatch<T>
         try
         {
             if (!BatchItems.Any())
+            {
                 await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+                logger.LogDebug("Deleted queue message batch {Id}.", options.MessageId);
+            }
             else
+            {
                 await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
+                logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId, BatchItems.Count);
+            }
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
-            // log missing queue message
+            logger.LogError(ex, "Accessing already flushed message with {messageId}.", options.MessageId);
         }
     }
 
