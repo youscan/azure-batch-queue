@@ -1,5 +1,4 @@
 using System.Runtime.Serialization;
-using System.Text;
 using AzureBatchQueue.Utils;
 using Newtonsoft.Json;
 
@@ -8,14 +7,18 @@ namespace AzureBatchQueue;
 public class MessageBatch<T>
 {
     public bool Compressed { get; init; }
+    private int MaxSizeInBytes { get; init; }
+    public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
 
     private readonly List<T> items = new();
     public List<T> Items() => items;
 
-    private int MaxSizeInBytes { get; init; }
-    public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
+    private readonly IMessageBatchSerializer<T> serializer;
+
+    private MessageBatch(IMessageBatchSerializer<T> serializer) => this.serializer = serializer;
 
     public MessageBatch(bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
+        : this(compressed ? new JsonSerializer<T>() : new GZipCompressedSerializer<T>())
     {
         Compressed = compressed;
         MaxSizeInBytes = maxSizeInBytes;
@@ -27,12 +30,7 @@ public class MessageBatch<T>
     /// <param name="items"></param>
     /// <param name="compressed"></param>
     /// <param name="maxSizeInBytes"></param>
-    public MessageBatch(List<T> items, bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
-    {
-        Compressed = compressed;
-        this.items = items;
-        MaxSizeInBytes = maxSizeInBytes;
-    }
+    public MessageBatch(List<T> items, bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes) : this(compressed, maxSizeInBytes) => this.items = items;
 
     public bool TryAdd(T item)
     {
@@ -47,28 +45,8 @@ public class MessageBatch<T>
         return false;
     }
 
-    private int GetBatchSize()
-    {
-        var serializedItems = Serialize(items);
-
-        return Compressed
-            ? StringCompression.Compress(serializedItems).Length
-            : Encoding.UTF8.GetBytes(serializedItems).Length;
-    }
-
-    public string Serialize()
-    {
-        var jsonItems = Serialize(items);
-
-        var data = new SerializedMessageBatch
-        {
-            Compressed = Compressed,
-            Body = Compressed ? StringCompression.CompressToBase64(jsonItems) : jsonItems
-        };
-
-        var json = JsonConvert.SerializeObject(data);
-        return json;
-    }
+    private int GetBatchSize() => serializer.GetSize(items);
+    public string Serialize() => serializer.Serialize(this);
 
     public static MessageBatch<T> Deserialize(string json)
     {
@@ -76,16 +54,16 @@ public class MessageBatch<T>
 
         if (data == null)
             throw new SerializationException(
-                $"Could not deserialize json into object of type {nameof(MessageBatch<T>)}");
+                $"Could not deserialize json into object of type {nameof(SerializedMessageBatch)}");
 
-        var body = data.Compressed ? StringCompression.Decompress(data.Body) : data.Body;
-        var items = JsonConvert.DeserializeObject<List<T>>(body);
+        IMessageBatchSerializer<T> serializer = data.Compressed ? new JsonSerializer<T>() : new GZipCompressedSerializer<T>();
+        var items = serializer.Deserialize(data.Body);
 
         if (items == null)
             throw new SerializationException(
                 $"Could not deserialize items of type {typeof(T)} in MessageBatch");
 
-        return new MessageBatch<T>(items, data.Compressed);
+        return new MessageBatch<T>(items.ToList(), data.Compressed);
     }
 
     private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
