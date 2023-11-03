@@ -6,7 +6,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureBatchQueue.Tests", "Az
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{2B7ECE35-294A-4053-8244-165DBA88A9B1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SendReceiveBatch", "SendReceiveBatch\SendReceiveBatch.csproj", "{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SendReceiveBatch", "Samples\SendReceiveBatch\SendReceiveBatch.csproj", "{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -22,12 +22,12 @@ Global
 		{26A12945-C0D2-4265-B3DA-F3C34A52FDB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26A12945-C0D2-4265-B3DA-F3C34A52FDB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{26A12945-C0D2-4265-B3DA-F3C34A52FDB6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{DCDB1437-7EBB-4413-9E9A-D73FCA2D8E80} = {2B7ECE35-294A-4053-8244-165DBA88A9B1}
+		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B} = {2B7ECE35-294A-4053-8244-165DBA88A9B1}
 	EndGlobalSection
 EndGlobal

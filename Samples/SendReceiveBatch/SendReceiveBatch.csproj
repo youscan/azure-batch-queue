@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\AzureBatchQueue\AzureBatchQueue.csproj" />
+      <ProjectReference Include="..\..\AzureBatchQueue\AzureBatchQueue.csproj" />
     </ItemGroup>
 
     <ItemGroup>
