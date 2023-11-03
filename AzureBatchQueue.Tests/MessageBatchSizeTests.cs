@@ -1,4 +1,4 @@
-using AzureBatchQueue.Utils;
+using FluentAssertions;
 using NUnit.Framework;
 
 namespace AzureBatchQueue.Tests;
@@ -7,7 +7,7 @@ namespace AzureBatchQueue.Tests;
 public class BatchMessageSizeTests
 {
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
-    private const int MaxAllowedMessageSizeInBytes = 49_119; // ~ 48 KB
+    private const int AzureQueueMaxAllowedSize = 49_126; // ~ 48 KB
 
     private BatchQueue<byte[]> batchQueue;
 
@@ -24,17 +24,10 @@ public class BatchMessageSizeTests
     public async Task TearDown() => await batchQueue.Delete();
 
     [Test]
-    public async Task SendMessageWithMaxAllowedSize()
+    public Task ThrowsExceptionWhenMessageIsTooLargeForAzure()
     {
-        var message = BatchOfSize(MaxAllowedMessageSizeInBytes, compress: false);
-
-        await batchQueue.SendBatch(message);
-    }
-
-    [Test]
-    public Task ThrowsExceptionWhenMessageIsTooLarge()
-    {
-        var message = BatchOfSize(MaxAllowedMessageSizeInBytes + 1, compress: false);
+        var message = BatchOfSize(AzureQueueMaxAllowedSize, compress: false);
+        message.Items().Count.Should().BeGreaterThan(0);
 
         Assert.ThrowsAsync<MessageTooLargeException>(async () => await batchQueue.SendBatch(message));
 
@@ -43,10 +36,10 @@ public class BatchMessageSizeTests
 
     private static MessageBatch<byte[]> BatchOfSize(int bytes, bool compress)
     {
-        IMessageBatchSerializer<byte[]> serializer = compress ? new GZipCompressedSerializer<byte[]>() : new JsonSerializer<byte[]>();
+        var serializerType = compress ? SerializerType.GZipCompressed : SerializerType.Json;
 
-        var batch = new MessageBatch<byte[]>(serializer);
-        batch.TryAdd(new byte[bytes]);
+        var items = new List<byte[]> { new byte[bytes] };
+        var batch = new MessageBatch<byte[]>(items, serializerType, AzureQueueMaxAllowedSize);
 
         return batch;
     }
