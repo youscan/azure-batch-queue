@@ -15,7 +15,7 @@ public class BatchQueueTests
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
-        batchQueue = new BatchQueue<TestItem>("UseDevelopmentStorage=true", "hello-world-queue", flushPeriod: flushPeriod);
+        batchQueue = new BatchQueue<TestItem>("UseDevelopmentStorage=true", RandomQueueName(), flushPeriod: flushPeriod);
     }
 
     [SetUp]
@@ -140,4 +140,6 @@ public class BatchQueueTests
 
         return batch;
     }
+
+    private static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
 }
