@@ -1,6 +1,7 @@
 using AzureBatchQueue;
 using AzureBatchQueue.Utils;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace SendReceiveBatch;
 
@@ -19,6 +20,7 @@ public class Sender
     public async Task Init()
     {
         await batchQueue.CreateIfNotExists();
+        await batchQueue.ClearMessages();
         Log("Sender is ready.");
     }
 
@@ -32,7 +34,7 @@ public class Sender
         {
             await batchQueue.SendBatch(batch);
 
-            Log($"Sent a batch {batch.Serialize()}.");
+            Log($"Sent a batch {JsonConvert.SerializeObject(batch.Items())}.");
             Sleep(TimeSpan.FromSeconds(5));
         }
     }

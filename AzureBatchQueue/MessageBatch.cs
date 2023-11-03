@@ -22,7 +22,11 @@ public class MessageBatch<T>
     }
 
     public MessageBatch(SerializerType serializerType, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
-        : this(GetSerializer(serializerType), maxSizeInBytes) { }
+    {
+        serializer = GetSerializer(serializerType);
+        SerializerType = serializerType;
+        MaxSizeInBytes = maxSizeInBytes;
+    }
 
     /// <summary>
     /// Use this ctor if you are sure that all items will fit into the batch

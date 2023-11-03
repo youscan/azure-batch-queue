@@ -56,4 +56,5 @@ public class BatchQueue<T>
 
     public async Task CreateIfNotExists(CancellationToken ct = default) => await queue.CreateIfNotExistsAsync(null, ct);
     public async Task Delete() => await queue.DeleteAsync();
+    public async Task ClearMessages() => await queue.ClearMessagesAsync();
 }
