@@ -48,7 +48,7 @@ public class BatchQueue<T>
 
         var messageBatch = MessageBatch<T>.Deserialize(msg.Value.Body.ToString());
 
-        var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod, messageBatch.Compressed);
+        var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod, messageBatch.SerializerType);
         var batch = new QueueMessageBatch<T>(queue, messageBatch.Items(), batchOptions, logger);
 
         return batch.Unpack();

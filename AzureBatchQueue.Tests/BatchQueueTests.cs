@@ -1,3 +1,4 @@
+using AzureBatchQueue.Utils;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -26,7 +27,7 @@ public class BatchQueueTests
     [Test]
     public async Task SendBatch()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
 
         (await batchQueue.ReceiveBatch()).Length.Should().Be(2);
     }
@@ -34,7 +35,7 @@ public class BatchQueueTests
     [Test]
     public async Task ReceiveBatch()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Select(x => x.Id).All(id => id != Guid.Empty).Should().BeTrue();
@@ -43,7 +44,7 @@ public class BatchQueueTests
     [Test]
     public async Task Complete()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         foreach (var batchItem in batchItems) await batchItem.Complete();
@@ -54,7 +55,7 @@ public class BatchQueueTests
     [Test]
     public async Task CompleteAfterCompletion()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
         var batchItems = await batchQueue.ReceiveBatch();
 
         // complete whole batch
@@ -68,7 +69,7 @@ public class BatchQueueTests
     [Test]
     public async Task FlushOnTimeout()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Length.Should().Be(2);
@@ -84,7 +85,7 @@ public class BatchQueueTests
     [Test]
     public async Task LeaseBatchWhileProcessing()
     {
-        await batchQueue.SendBatch(Batch(true));
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -102,8 +103,8 @@ public class BatchQueueTests
     [Test]
     public async Task HandleCompressedAndUncompressedMessages()
     {
-        await batchQueue.SendBatch(Batch(compressed: true));
-        await batchQueue.SendBatch(Batch(compressed: false));
+        await batchQueue.SendBatch(CompressedBatch());
+        await batchQueue.SendBatch(Batch());
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -123,9 +124,12 @@ public class BatchQueueTests
         batchItems2Updated.Length.Should().Be(1);
     }
 
-    private static MessageBatch<TestItem> Batch(bool compressed)
+    private static MessageBatch<TestItem> CompressedBatch() => Batch(new GZipCompressedSerializer<TestItem>());
+
+    private static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer = null)
     {
-        var batch = new MessageBatch<TestItem>(compressed: compressed);
+        serializer ??= new JsonSerializer<TestItem>();
+        var batch = new MessageBatch<TestItem>(serializer);
         var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
 
         foreach (var item in items)

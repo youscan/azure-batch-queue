@@ -6,31 +6,32 @@ namespace AzureBatchQueue;
 
 public class MessageBatch<T>
 {
-    public bool Compressed { get; init; }
-    private int MaxSizeInBytes { get; init; }
-    public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
-
     private readonly List<T> items = new();
     public List<T> Items() => items;
 
+    private int MaxSizeInBytes { get; init; }
+    public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
+    public SerializerType SerializerType { get; init; }
     private readonly IMessageBatchSerializer<T> serializer;
 
-    private MessageBatch(IMessageBatchSerializer<T> serializer) => this.serializer = serializer;
-
-    public MessageBatch(bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
-        : this(compressed ? new JsonSerializer<T>() : new GZipCompressedSerializer<T>())
+    public MessageBatch(IMessageBatchSerializer<T> serializer, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
     {
-        Compressed = compressed;
+        this.serializer = serializer;
         MaxSizeInBytes = maxSizeInBytes;
+        SerializerType = serializer.GetSerializerType();
     }
+
+    public MessageBatch(SerializerType serializerType, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
+        : this(GetSerializer(serializerType), maxSizeInBytes) { }
 
     /// <summary>
     /// Use this ctor if you are sure that all items will fit into the batch
     /// </summary>
     /// <param name="items"></param>
-    /// <param name="compressed"></param>
+    /// <param name="serializerType"></param>
     /// <param name="maxSizeInBytes"></param>
-    public MessageBatch(List<T> items, bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes) : this(compressed, maxSizeInBytes) => this.items = items;
+    public MessageBatch(List<T> items, SerializerType serializerType, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
+        : this(serializerType, maxSizeInBytes) => this.items = items;
 
     public bool TryAdd(T item)
     {
@@ -56,22 +57,36 @@ public class MessageBatch<T>
             throw new SerializationException(
                 $"Could not deserialize json into object of type {nameof(SerializedMessageBatch)}");
 
-        IMessageBatchSerializer<T> serializer = data.Compressed ? new JsonSerializer<T>() : new GZipCompressedSerializer<T>();
+        var serializer = GetSerializer(data.SerializerType);
         var items = serializer.Deserialize(data.Body);
 
         if (items == null)
             throw new SerializationException(
                 $"Could not deserialize items of type {typeof(T)} in MessageBatch");
 
-        return new MessageBatch<T>(items.ToList(), data.Compressed);
+        return new MessageBatch<T>(items.ToList(), data.SerializerType);
     }
 
-    private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
+    private static IMessageBatchSerializer<T> GetSerializer(SerializerType serializerType) =>
+        serializerType switch
+        {
+            SerializerType.Json => new JsonSerializer<T>(),
+            SerializerType.GZipCompressed => new GZipCompressedSerializer<T>(),
+            _ => throw new ArgumentOutOfRangeException(nameof(serializerType), serializerType, null)
+        };
 }
 
 [Serializable]
 internal class SerializedMessageBatch
 {
-    public bool Compressed { get; init; }
     public string Body { get; init; }
+    public SerializerType SerializerType { get; init; }
 }
+
+[Serializable]
+public enum SerializerType
+{
+    Json = 0,
+    GZipCompressed = 1
+}
+

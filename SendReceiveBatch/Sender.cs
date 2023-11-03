@@ -1,4 +1,5 @@
 using AzureBatchQueue;
+using AzureBatchQueue.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace SendReceiveBatch;
@@ -7,9 +8,11 @@ public class Sender
 {
     private BatchQueue<string> batchQueue;
     private const int maxBatchSizeInBytes = 30;
+    private IMessageBatchSerializer<string> serializer;
 
-    public Sender(string queueName, ILogger<BatchQueue<string>> logger)
+    public Sender(string queueName, ILogger<BatchQueue<string>> logger, IMessageBatchSerializer<string> serializer)
     {
+        this.serializer = serializer;
         batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, flushPeriod: TimeSpan.FromSeconds(5), logger);
     }
 
@@ -40,12 +43,12 @@ public class Sender
         Thread.Sleep(sleep);
     }
 
-    private static IEnumerable<MessageBatch<string>> CreateBatches(IReadOnlyList<string>? words)
+    private IEnumerable<MessageBatch<string>> CreateBatches(IReadOnlyList<string>? words)
     {
         if (words == null || words.Count == 0)
             return ArraySegment<MessageBatch<string>>.Empty;
 
-        var batches = new List<MessageBatch<string>> { new(false, maxBatchSizeInBytes) };
+        var batches = new List<MessageBatch<string>> { new(serializer, maxBatchSizeInBytes) };
 
         for (var i = 0; i < words.Count;)
         {
@@ -61,7 +64,7 @@ public class Sender
                 throw new Exception($"Word {words[i]} is too large to fit in the batch");
 
             // add new batch
-            batches.Add(new MessageBatch<string>(false, maxBatchSizeInBytes));
+            batches.Add(new MessageBatch<string>(serializer, maxBatchSizeInBytes));
         }
 
         return batches;

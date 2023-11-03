@@ -52,7 +52,7 @@ public class QueueMessageBatch<T>
         }
     }
 
-    private string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.Compressed).Serialize();
+    private string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.SerializerType).Serialize();
 
     public Task Complete(Guid id)
     {
@@ -85,4 +85,4 @@ public class QueueMessageBatch<T>
     }
 }
 
-public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, bool Compressed);
+public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, SerializerType SerializerType);

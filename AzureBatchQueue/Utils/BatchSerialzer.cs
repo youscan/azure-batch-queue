@@ -10,6 +10,8 @@ public interface IMessageBatchSerializer<T>
     public IEnumerable<T>? Deserialize(string json);
 
     public int GetSize(IEnumerable<T> items);
+
+    public SerializerType GetSerializerType();
 }
 
 /// <summary>
@@ -21,7 +23,7 @@ public class JsonSerializer<T> : IMessageBatchSerializer<T>
     public string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
     public string Serialize(MessageBatch<T> batch)
     {
-        var data = new SerializedMessageBatch() { Compressed = batch.Compressed, Body = Serialize(batch.Items()) };
+        var data = new SerializedMessageBatch { SerializerType = GetSerializerType(), Body = Serialize(batch.Items()) };
 
         return JsonConvert.SerializeObject(data);
     }
@@ -34,7 +36,7 @@ public class JsonSerializer<T> : IMessageBatchSerializer<T>
         return Encoding.UTF8.GetBytes(json).Length;
     }
 
-    public bool IsCompressed() => false;
+    public SerializerType GetSerializerType() => SerializerType.Json;
 }
 
 /// <summary>
@@ -56,7 +58,7 @@ public class GZipCompressedSerializer<T> : IMessageBatchSerializer<T>
 
         var data = new SerializedMessageBatch
         {
-            Compressed = batch.Compressed,
+            SerializerType = GetSerializerType(),
             Body = StringCompression.CompressToBase64(json)
         };
 
@@ -77,5 +79,5 @@ public class GZipCompressedSerializer<T> : IMessageBatchSerializer<T>
         return StringCompression.Compress(json).Length;
     }
 
-    public bool IsCompressed() => true;
+    public SerializerType GetSerializerType() => SerializerType.GZipCompressed;
 }

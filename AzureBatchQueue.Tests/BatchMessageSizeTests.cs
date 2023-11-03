@@ -1,3 +1,4 @@
+using AzureBatchQueue.Utils;
 using NUnit.Framework;
 
 namespace AzureBatchQueue.Tests;
@@ -42,7 +43,9 @@ public class BatchMessageSizeTests
 
     private static MessageBatch<byte[]> BatchOfSize(int bytes, bool compress)
     {
-        var batch = new MessageBatch<byte[]>(compress);
+        IMessageBatchSerializer<byte[]> serializer = compress ? new GZipCompressedSerializer<byte[]>() : new JsonSerializer<byte[]>();
+
+        var batch = new MessageBatch<byte[]>(serializer);
         batch.TryAdd(new byte[bytes]);
 
         return batch;
