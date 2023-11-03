@@ -8,17 +8,13 @@ namespace AzureBatchQueue;
 public class MessageBatch<T>
 {
     public bool Compressed { get; init; }
-    public string Body { get; init; }
 
-    [IgnoreDataMember]
     private readonly List<T> items = new();
     public List<T> Items() => items;
 
-    [IgnoreDataMember]
     private int MaxSizeInBytes { get; init; }
     public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
 
-    public MessageBatch() { }
     public MessageBatch(bool compressed, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
     {
         Compressed = compressed;
@@ -64,8 +60,9 @@ public class MessageBatch<T>
     {
         var jsonItems = Serialize(items);
 
-        var data = new MessageBatch<T>(Compressed)
+        var data = new SerializedMessageBatch
         {
+            Compressed = Compressed,
             Body = Compressed ? StringCompression.CompressToBase64(jsonItems) : jsonItems
         };
 
@@ -75,7 +72,7 @@ public class MessageBatch<T>
 
     public static MessageBatch<T> Deserialize(string json)
     {
-        var data = JsonConvert.DeserializeObject<MessageBatch<T>>(json);
+        var data = JsonConvert.DeserializeObject<SerializedMessageBatch>(json);
 
         if (data == null)
             throw new SerializationException(
@@ -92,4 +89,11 @@ public class MessageBatch<T>
     }
 
     private static string Serialize(IEnumerable<T> items) => JsonConvert.SerializeObject(items);
+}
+
+[Serializable]
+internal class SerializedMessageBatch
+{
+    public bool Compressed { get; init; }
+    public string Body { get; init; }
 }
