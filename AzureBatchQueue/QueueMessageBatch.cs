@@ -43,12 +43,17 @@ public class QueueMessageBatch<T>
             else
             {
                 await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
-                logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId, BatchItems.Count);
+                logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId,
+                    BatchItems.Count);
             }
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
             logger.LogError(ex, "Accessing already flushed message with {messageId}.", options.MessageId);
+        }
+        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
+        {
+            logger.LogError(ex, "Queue {queueName} not found when trying to delete message {messageId}.", queue.Name, options.MessageId);
         }
     }
 
