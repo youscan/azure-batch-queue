@@ -35,6 +35,7 @@ public class BatchQueue<T>
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected exception while sending a batch.");
+            throw;
         }
     }
 
