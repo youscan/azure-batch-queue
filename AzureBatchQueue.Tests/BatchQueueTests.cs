@@ -62,6 +62,9 @@ public class BatchQueueTests
         foreach (var batchItem in batchItems)
             await batchItem.Complete();
 
+        // wait while batch completes
+        await Task.Delay(TimeSpan.FromMilliseconds(20));
+
         // complete already flushed message
          Assert.ThrowsAsync<MessageBatchCompletedException>(async () => await batchItems.First().Complete());
     }
