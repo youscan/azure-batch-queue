@@ -14,12 +14,12 @@ public class Sender
     public Sender(string queueName, ILogger<BatchQueue<string>> logger, IMessageBatchSerializer<string> serializer)
     {
         this.serializer = serializer;
-        batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, flushPeriod: TimeSpan.FromSeconds(5), logger);
+        batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, flushPeriod: TimeSpan.FromSeconds(5), logger: logger);
     }
 
     public async Task Init()
     {
-        await batchQueue.CreateIfNotExists();
+        await batchQueue.Init();
         await batchQueue.ClearMessages();
         Log("Sender is ready.");
     }

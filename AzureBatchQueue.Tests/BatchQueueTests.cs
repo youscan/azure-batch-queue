@@ -19,7 +19,7 @@ public class BatchQueueTests
     }
 
     [SetUp]
-    public async Task SetUp() => await batchQueue.CreateIfNotExists();
+    public async Task SetUp() => await batchQueue.Init();
 
     [TearDown]
     public async Task TearDown() => await batchQueue.Delete();
