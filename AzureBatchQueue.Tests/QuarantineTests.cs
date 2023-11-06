@@ -39,6 +39,30 @@ public class QuarantineTests
         (await batchQueue.QuarantineApproximateMessagesCount()).Should().Be(1);
     }
 
+    [Test]
+    public async Task DequarantineMessages()
+    {
+        var originalBatch = Batch();
+        await batchQueue.SendBatch(originalBatch);
+
+        (await batchQueue.ApproximateMessagesCount()).Should().Be(1);
+
+        await ReceiveBatch(maxDequeueCount);
+
+        // message was quarantined
+        var emptyBatch = await batchQueue.ReceiveBatch();
+        emptyBatch.Length.Should().Be(0);
+
+        (await batchQueue.ApproximateMessagesCount()).Should().Be(0);
+        (await batchQueue.QuarantineApproximateMessagesCount()).Should().Be(1);
+
+        await batchQueue.Dequarantine();
+
+        var batchItems = await batchQueue.ReceiveBatch();
+        var receivedItem = batchItems.Single().Item;
+        receivedItem.Should().BeEquivalentTo(originalBatch.Items().Single());
+    }
+
     private async Task ReceiveBatch(int dequeueCount)
     {
         for (var i = 0; i < dequeueCount; i++)

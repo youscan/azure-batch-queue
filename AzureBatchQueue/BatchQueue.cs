@@ -130,4 +130,28 @@ public class BatchQueue<T>
 
         return response.HasValue ? response.Value.ApproximateMessagesCount : 0;
     }
+
+    public async Task Dequarantine()
+    {
+        var count = 0;
+
+        do
+        {
+            var messages = await quarantineQueue.ReceiveMessagesAsync();
+
+            if (!messages.HasValue || !messages.Value.Any())
+                break;
+
+            foreach (var message in messages.Value)
+            {
+                await queue.SendMessageAsync(message.Body);
+                await quarantineQueue.DeleteMessageAsync(message.MessageId, message.PopReceipt);
+
+                if (count % 100 == 0)
+                    logger.LogInformation("Dequarantined {messages} msgs.", count);
+            }
+        } while (true);
+
+        logger.LogInformation("Dequarantined {messages} msgs", count);
+    }
 }
