@@ -27,7 +27,7 @@ public class BatchQueueTests
     [Test]
     public async Task SendBatch()
     {
-        await batchQueue.SendBatch(Batch());
+        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
 
         (await batchQueue.ReceiveBatch()).Length.Should().Be(2);
     }
@@ -35,16 +35,18 @@ public class BatchQueueTests
     [Test]
     public async Task ReceiveBatch()
     {
-        await batchQueue.SendBatch(Batch());
+        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
+        await batchQueue.SendBatch(Batch(items));
 
         var batchItems = await batchQueue.ReceiveBatch();
+        batchItems.Length.Should().Be(items.Length);
         batchItems.Select(x => x.Id).All(id => id != Guid.Empty).Should().BeTrue();
     }
 
     [Test]
     public async Task Complete()
     {
-        await batchQueue.SendBatch(Batch());
+        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
 
         var batchItems = await batchQueue.ReceiveBatch();
         foreach (var batchItem in batchItems) await batchItem.Complete();
@@ -55,7 +57,7 @@ public class BatchQueueTests
     [Test]
     public async Task CompleteAfterCompletion()
     {
-        await batchQueue.SendBatch(Batch());
+        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
         var batchItems = await batchQueue.ReceiveBatch();
 
         // complete whole batch
@@ -72,14 +74,13 @@ public class BatchQueueTests
     [Test]
     public async Task FlushOnTimeout()
     {
-        await batchQueue.SendBatch(Batch());
+        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Length.Should().Be(2);
         await batchItems.First().Complete();
 
-        // wait longer than flush period for the whole batch
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+        await WaitTillFlush();
 
         var remainingItems = await batchQueue.ReceiveBatch();
         remainingItems.Length.Should().Be(1);
@@ -88,7 +89,7 @@ public class BatchQueueTests
     [Test]
     public async Task LeaseBatchWhileProcessing()
     {
-        await batchQueue.SendBatch(Batch());
+        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -97,7 +98,7 @@ public class BatchQueueTests
         batchItems2.Length.Should().Be(0);
 
         // do not complete any messages, and wait for the batch to return to the queue
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+        await WaitTillFlush();
 
         var batchItems3 = await batchQueue.ReceiveBatch();
         batchItems3.Length.Should().Be(2);
@@ -106,8 +107,9 @@ public class BatchQueueTests
     [Test]
     public async Task HandleCompressedAndUncompressedMessages()
     {
-        await batchQueue.SendBatch(CompressedBatch());
-        await batchQueue.SendBatch(Batch());
+        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
+        await batchQueue.SendBatch(CompressedBatch(items));
+        await batchQueue.SendBatch(Batch(items));
 
         var batchItems = await batchQueue.ReceiveBatch();
         var batchItems2 = await batchQueue.ReceiveBatch();
@@ -118,8 +120,7 @@ public class BatchQueueTests
         await batchItems.First().Complete();
         await batchItems2.First().Complete();
 
-        // wait longer than flush period for the whole batch
-        await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+        await WaitTillFlush();
 
         var batchItems1Updated = await batchQueue.ReceiveBatch();
         var batchItems2Updated = await batchQueue.ReceiveBatch();
@@ -127,13 +128,13 @@ public class BatchQueueTests
         batchItems2Updated.Length.Should().Be(1);
     }
 
-    private static MessageBatch<TestItem> CompressedBatch() => Batch(new GZipCompressedSerializer<TestItem>());
+    private static MessageBatch<TestItem> CompressedBatch(params TestItem[] items) => Batch(new GZipCompressedSerializer<TestItem>(), items);
+    private static MessageBatch<TestItem> Batch(params TestItem[] items) => Batch(new JsonSerializer<TestItem>(), items);
 
-    private static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer = null)
+    private static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer, TestItem[] items)
     {
         serializer ??= new JsonSerializer<TestItem>();
         var batch = new MessageBatch<TestItem>(serializer);
-        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
 
         foreach (var item in items)
         {
@@ -143,6 +144,8 @@ public class BatchQueueTests
 
         return batch;
     }
+
+    private async Task WaitTillFlush() => await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
 
     private static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
 }
