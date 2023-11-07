@@ -5,7 +5,9 @@ Send batches of items in a single QueueMessage via Azure Storage Queue
 
 
 ## How to run samples and tests locally
-### Run Azurite
+### Prepare the Queue storage
+All tests and samples use the Azurite emulator for local Azure Storage development.
+#### Run Azurite
 1. Install [azurite](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azurite?).
 Run from the AzureBatchQueue solution folder:
 ```
@@ -16,12 +18,12 @@ make azurite-pull
 make azurite-up
 ```
 
-### Create account
-By default Azurite uses this account name and key:
+### Run tests and samples from the command line or your IDE
+After Azurite is ready, you can start playing with tests and samples.
+To run tests from the command line, go to the AzureBatchQueue solution folder and run:
 ```
-Account name: devstoreaccount1
-Account key: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+dotnet test
 ```
-so you can these ones in your connection string, or create [custom ones](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azurite?tabs=npm#custom-storage-accounts-and-keys).
+
 
 
