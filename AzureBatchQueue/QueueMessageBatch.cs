@@ -42,9 +42,7 @@ public class QueueMessageBatch<T>
                 return;
             }
 
-            await batchQueue.UpdateMessageAsync(options, Serialize());
-            logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId,
-                BatchItems.Count);
+            await batchQueue.UpdateOrQuarantine(options, Serialize(), BatchItems.Count);
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
@@ -89,4 +87,4 @@ public class QueueMessageBatch<T>
     }
 }
 
-public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, SerializerType SerializerType);
+public record MessageBatchOptions(string MessageId, string PopReceipt, TimeSpan FlushPeriod, SerializerType SerializerType, long DequeueCount);

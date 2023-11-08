@@ -44,14 +44,10 @@ public class QuarantineTests
     {
         var originalBatch = Batch();
         await batchQueue.SendBatch(originalBatch);
-
         (await batchQueue.ApproximateMessagesCount()).Should().Be(1);
 
-        await ReceiveBatch(maxDequeueCount);
-
         // message was quarantined
-        var emptyBatch = await batchQueue.ReceiveBatch();
-        emptyBatch.Length.Should().Be(0);
+        await ReceiveBatch(maxDequeueCount);
 
         (await batchQueue.ApproximateMessagesCount()).Should().Be(0);
         (await batchQueue.QuarantineApproximateMessagesCount()).Should().Be(1);

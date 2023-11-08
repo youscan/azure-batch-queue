@@ -66,12 +66,6 @@ public class BatchQueue<T>
 
         foreach (var msg in messages.Value!)
         {
-            if (msg.DequeueCount > maxDequeueCount)
-            {
-                await QuarantineMessage(msg, "MaxDequeueCount");
-                continue;
-            }
-
             var batch = QueueMessageBatch(msg);
             items.AddRange(batch.Unpack());
         }
@@ -87,12 +81,6 @@ public class BatchQueue<T>
         if (queueMessage?.Body == null)
             return Array.Empty<BatchItem<T>>();
 
-        if (queueMessage.DequeueCount > maxDequeueCount)
-        {
-            await QuarantineMessage(queueMessage, "MaxDequeueCount");
-            return Array.Empty<BatchItem<T>>();
-        }
-
         var batch = QueueMessageBatch(queueMessage);
 
         return batch.Unpack();
@@ -102,24 +90,20 @@ public class BatchQueue<T>
     {
         var messageBatch = MessageBatch<T>.Deserialize(queueMessage.Body.ToString());
 
-        var batchOptions = new MessageBatchOptions(queueMessage.MessageId, queueMessage.PopReceipt, flushPeriod,
-            messageBatch.SerializerType);
+        var batchOptions = new MessageBatchOptions(queueMessage.MessageId, queueMessage.PopReceipt, flushPeriod, messageBatch.SerializerType, queueMessage.DequeueCount);
         return new QueueMessageBatch<T>(this, messageBatch.Items(), batchOptions, logger);
     }
 
-    private async Task QuarantineMessage(QueueMessage queueMessage, string reason)
+    private async Task QuarantineMessage(string body, MessageBatchOptions batchOptions, string reason)
     {
         try
         {
-            await quarantineQueue.SendMessageAsync(queueMessage.Body);
-            await queue.DeleteMessageAsync(queueMessage.MessageId, queueMessage.PopReceipt);
-
-            logger.LogInformation("Message {MessageId} inserted at {InsertionTime} was quarantined. Reason {Reason}.",
-                queueMessage.MessageId, queueMessage.InsertedOn, reason);
+            await quarantineQueue.SendMessageAsync(body);
+            await queue.DeleteMessageAsync(batchOptions.MessageId, batchOptions.PopReceipt);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to quarantine message {messageId}.", queueMessage.MessageId);
+            logger.LogError(ex, "Failed to quarantine message {messageId}.", batchOptions.MessageId);
         }
     }
 
@@ -190,6 +174,18 @@ public class BatchQueue<T>
     }
 
     public async Task DeleteMessageAsync(MessageBatchOptions options) => await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
-    public async Task UpdateMessageAsync(MessageBatchOptions options, string body) => await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, body);
+    public async Task UpdateOrQuarantine(MessageBatchOptions options, string body, int itemsLeft, bool quarantineOnMaxDequeueCount = true)
+    {
+        if (quarantineOnMaxDequeueCount && options.DequeueCount >= maxDequeueCount)
+        {
+            await QuarantineMessage(body, options, "MaxDequeueCount");
+            logger.LogInformation("Message {MessageId} was quarantined with {BatchItemsCount} items left.. Reason MaxDequeueCount.", options.MessageId, itemsLeft);
+            return;
+        }
+
+        await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, body);
+        logger.LogDebug("Message {MessageId} was updated with with {BatchItemsCount} items left.", options.MessageId, itemsLeft);
+    }
+
     public string Name() => queue.Name;
 }
