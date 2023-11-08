@@ -52,6 +52,33 @@ public class BatchQueue<T>
         }
     }
 
+    public async Task<BatchItem<T>[]> ReceiveMany(int maxBatches = 32)
+    {
+        if (maxBatches is < 1 or > 32)
+            throw new ArgumentException($"MaxMessages is outside of the permissible range. Actual value is {maxBatches}, when minimumAllowed is 1 and maximumAllowed is 32.");
+
+        var messages = await queue.ReceiveMessagesAsync(maxBatches, visibilityTimeout);
+
+        if (messages.Value == null || !messages.HasValue || !messages.Value.Any())
+            return Array.Empty<BatchItem<T>>();
+
+        var items = new List<BatchItem<T>>();
+
+        foreach (var msg in messages.Value!)
+        {
+            if (msg.DequeueCount > maxDequeueCount)
+            {
+                await QuarantineMessage(msg, "MaxDequeueCount");
+                continue;
+            }
+
+            var batch = QueueMessageBatch(msg);
+            items.AddRange(batch.Unpack());
+        }
+
+        return items.ToArray();
+    }
+
     public async Task<BatchItem<T>[]> ReceiveBatch()
     {
         var msg = await queue.ReceiveMessageAsync(visibilityTimeout);

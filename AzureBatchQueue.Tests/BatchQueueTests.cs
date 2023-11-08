@@ -44,6 +44,28 @@ public class BatchQueueTests
     }
 
     [Test]
+    public async Task ReceiveMany()
+    {
+        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
+        const int amountOfBatchesToSend = 3;
+
+        for (var i = 0; i < amountOfBatchesToSend; i++)
+        {
+            await batchQueue.SendBatch(Batch(items));
+        }
+
+        var batchItems = await batchQueue.ReceiveMany();
+
+        batchItems.Length.Should().Be(amountOfBatchesToSend * items.Length);
+    }
+
+    [Test]
+    public void ThrowsWhenAskingToReceiveTooManyMessagesAtOnce()
+    {
+        Assert.ThrowsAsync<ArgumentException>(async () => await batchQueue.ReceiveMany(100));
+    }
+
+    [Test]
     public async Task Complete()
     {
         await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
