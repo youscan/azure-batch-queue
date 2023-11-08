@@ -104,7 +104,7 @@ public class BatchQueue<T>
 
         var batchOptions = new MessageBatchOptions(queueMessage.MessageId, queueMessage.PopReceipt, flushPeriod,
             messageBatch.SerializerType);
-        return new QueueMessageBatch<T>(queue, messageBatch.Items(), batchOptions, logger);
+        return new QueueMessageBatch<T>(this, messageBatch.Items(), batchOptions, logger);
     }
 
     private async Task QuarantineMessage(QueueMessage queueMessage, string reason)
@@ -188,4 +188,8 @@ public class BatchQueue<T>
 
         logger.LogInformation("Dequarantined {messages} msgs", count);
     }
+
+    public async Task DeleteMessageAsync(MessageBatchOptions options) => await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+    public async Task UpdateMessageAsync(MessageBatchOptions options, string body) => await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, body);
+    public string Name() => queue.Name;
 }

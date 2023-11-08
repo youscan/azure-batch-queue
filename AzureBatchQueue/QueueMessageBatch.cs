@@ -1,5 +1,4 @@
-﻿using Azure.Storage.Queues;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AzureBatchQueue;
@@ -10,7 +9,7 @@ namespace AzureBatchQueue;
 /// <typeparam name="T"></typeparam>
 public class QueueMessageBatch<T>
 {
-    private readonly QueueClient queue;
+    private readonly BatchQueue<T> batchQueue;
     private readonly MessageBatchOptions options;
     private readonly HashSet<BatchItem<T>> BatchItems;
 
@@ -18,9 +17,10 @@ public class QueueMessageBatch<T>
     private bool completed = false;
     private readonly ILogger<BatchQueue<T>> logger;
 
-    public QueueMessageBatch(QueueClient queue, IEnumerable<T> items, MessageBatchOptions options, ILogger<BatchQueue<T>>? logger = null)
+    public QueueMessageBatch(BatchQueue<T> batchQueue, IEnumerable<T> items, MessageBatchOptions options,
+        ILogger<BatchQueue<T>>? logger = null)
     {
-        this.queue = queue;
+        this.batchQueue = batchQueue;
         this.options = options;
         this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
 
@@ -37,15 +37,14 @@ public class QueueMessageBatch<T>
         {
             if (!BatchItems.Any())
             {
-                await queue.DeleteMessageAsync(options.MessageId, options.PopReceipt);
+                await batchQueue.DeleteMessageAsync(options);
                 logger.LogDebug("Deleted queue message batch {Id}.", options.MessageId);
+                return;
             }
-            else
-            {
-                await queue.UpdateMessageAsync(options.MessageId, options.PopReceipt, Serialize());
-                logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId,
-                    BatchItems.Count);
-            }
+
+            await batchQueue.UpdateMessageAsync(options, Serialize());
+            logger.LogDebug("Updated queue message batch {Id} with {BatchItemsCount} items left.", options.MessageId,
+                BatchItems.Count);
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
@@ -53,7 +52,7 @@ public class QueueMessageBatch<T>
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
         {
-            logger.LogError(ex, "Queue {queueName} not found when trying to delete message {messageId}.", queue.Name, options.MessageId);
+            logger.LogError(ex, "Queue {queueName} not found when trying to delete message {messageId}.", batchQueue.Name(), options.MessageId);
         }
     }
 
