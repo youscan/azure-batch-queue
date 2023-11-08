@@ -55,22 +55,29 @@ public class BatchQueue<T>
     public async Task<BatchItem<T>[]> ReceiveBatch()
     {
         var msg = await queue.ReceiveMessageAsync(visibilityTimeout);
+        var queueMessage = msg.Value;
 
-        if (msg.Value?.Body == null)
+        if (queueMessage?.Body == null)
             return Array.Empty<BatchItem<T>>();
 
-        if (msg.Value.DequeueCount > maxDequeueCount)
+        if (queueMessage.DequeueCount > maxDequeueCount)
         {
-            await QuarantineMessage(msg.Value, "MaxDequeueCount");
+            await QuarantineMessage(queueMessage, "MaxDequeueCount");
             return Array.Empty<BatchItem<T>>();
         }
 
-        var messageBatch = MessageBatch<T>.Deserialize(msg.Value.Body.ToString());
-
-        var batchOptions = new MessageBatchOptions(msg.Value.MessageId, msg.Value.PopReceipt, flushPeriod, messageBatch.SerializerType);
-        var batch = new QueueMessageBatch<T>(queue, messageBatch.Items(), batchOptions, logger);
+        var batch = QueueMessageBatch(queueMessage);
 
         return batch.Unpack();
+    }
+
+    private QueueMessageBatch<T> QueueMessageBatch(QueueMessage queueMessage)
+    {
+        var messageBatch = MessageBatch<T>.Deserialize(queueMessage.Body.ToString());
+
+        var batchOptions = new MessageBatchOptions(queueMessage.MessageId, queueMessage.PopReceipt, flushPeriod,
+            messageBatch.SerializerType);
+        return new QueueMessageBatch<T>(queue, messageBatch.Items(), batchOptions, logger);
     }
 
     private async Task QuarantineMessage(QueueMessage queueMessage, string reason)
