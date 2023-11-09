@@ -13,6 +13,7 @@ public class MessageBatch<T>
     public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
     public SerializerType SerializerType { get; init; }
     private readonly IMessageBatchSerializer<T> serializer;
+    private int? batchSize;
 
     public MessageBatch(IMessageBatchSerializer<T> serializer, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
     {
@@ -41,17 +42,21 @@ public class MessageBatch<T>
     {
         items.Add(item);
 
-        var jsonSize = GetBatchSize();
+        var jsonSize = CalculateItemsSize();
 
         if (jsonSize <= MaxSizeInBytes)
+        {
+            batchSize = jsonSize;
             return true;
+        }
 
         items.RemoveAt(items.Count - 1);
         return false;
     }
 
-    private int GetBatchSize() => serializer.GetSize(items);
+    private int CalculateItemsSize() => serializer.GetSize(items);
     public string Serialize() => serializer.Serialize(this);
+    public int GetBatchSizeInBytes() => batchSize ?? CalculateItemsSize();
 
     public static MessageBatch<T> Deserialize(string json)
     {
