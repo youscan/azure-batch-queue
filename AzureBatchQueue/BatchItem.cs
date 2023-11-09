@@ -2,14 +2,14 @@ namespace AzureBatchQueue;
 
 public class BatchItem<T>
 {
-    public BatchItem(Guid id, QueueMessageBatch<T> batch, T item)
+    public BatchItem(string id, QueueMessageBatch<T> batch, T item)
     {
         Id = id;
         Batch = batch;
         Item = item;
     }
 
-    public Guid Id { get; }
+    public string Id { get; }
     private QueueMessageBatch<T> Batch { get; }
     public T Item;
 

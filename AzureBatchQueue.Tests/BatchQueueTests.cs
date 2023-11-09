@@ -40,7 +40,6 @@ public class BatchQueueTests
 
         var batchItems = await batchQueue.ReceiveBatch();
         batchItems.Length.Should().Be(items.Length);
-        batchItems.Select(x => x.Id).All(id => id != Guid.Empty).Should().BeTrue();
     }
 
     [Test]

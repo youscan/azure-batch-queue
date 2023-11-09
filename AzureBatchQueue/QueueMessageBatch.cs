@@ -24,7 +24,7 @@ public class QueueMessageBatch<T>
         this.options = options;
         this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
 
-        BatchItems = items.Select(x => new BatchItem<T>(Guid.NewGuid(), this, x)).ToHashSet();
+        BatchItems = items.Select((x, idx) => new BatchItem<T>($"{options.MessageId}_{options.PopReceipt}_{idx}", this, x)).ToHashSet();
         timer = new Timer(async _ => await Flush());
     }
 
@@ -56,7 +56,7 @@ public class QueueMessageBatch<T>
 
     private string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.SerializerType).Serialize();
 
-    public Task Complete(Guid id)
+    public Task Complete(string id)
     {
         BatchItems.RemoveWhere(x => x.Id == id);
         if (BatchItems.Any()) return Task.CompletedTask;
