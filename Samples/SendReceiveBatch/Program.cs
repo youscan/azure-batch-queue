@@ -14,11 +14,7 @@ var serilogLogger = new LoggerConfiguration()
     .CreateLogger();
 
 var microsoftLogger = new SerilogLoggerFactory(serilogLogger).CreateLogger<BatchQueue<string>>();
-
-Console.WriteLine("Compress batches using GZip? Write Yes/No and press Enter.");
-var response = Console.ReadLine();
-var serializer = GetSerializer<string>(response?.ToLower() == "yes");
-Console.WriteLine($"Will use {serializer.GetType()} serializer.");
+var serializer = new GZipCompressedSerializer<string>();
 
 var sender = Task.Run(async () =>
 {
