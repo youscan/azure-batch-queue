@@ -24,25 +24,16 @@ public class Receiver
     {
         Log("Start receiving.");
 
-        while (!canceled)
+        await foreach (var batchItem in batchQueue.Receive())
         {
-            var batchItems = await batchQueue.ReceiveBatch();
-
-            Log($"Received batch with {batchItems.Length} items.");
-
-            foreach (var batchItem in batchItems)
+            if (DoNotComplete.Contains(batchItem.Item))
             {
-                if (DoNotComplete.Contains(batchItem.Item))
-                {
-                    Log($"Will not complete {batchItem.Item}");
-                    continue;
-                }
-
-                Log($"Completed {batchItem.Item}");
-                await batchItem.Complete();
+                Log($"Will not complete {batchItem.Item}");
+                continue;
             }
 
-            Sleep(TimeSpan.FromSeconds(2));
+            Log($"Completed {batchItem.Item}");
+            batchItem.Complete();
         }
 
         Log("Finish receiving items.");

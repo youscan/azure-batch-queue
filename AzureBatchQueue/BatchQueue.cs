@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Logging;
@@ -71,6 +73,79 @@ public class BatchQueue<T>
         }
 
         return items.ToArray();
+    }
+
+    public async IAsyncEnumerable<QueueMessage<T>> Receive([EnumeratorCancellation] CancellationToken cancellation = default)
+    {
+        logger.Log(LogLevel.Information, "Start enumeration");
+
+        while (!cancellation.IsCancellationRequested)
+        {
+            var pending = Channel.CreateUnbounded<QueueMessage<T>>();
+            var batchCancellation = new CancellationTokenSource();
+
+            var batch = await NextBatch();
+
+            if (batch.Message == null)
+                continue;
+
+            batchCancellation.CancelAfter(flushPeriod);
+
+            if (batch.Items.Any())
+                logger.Log(LogLevel.Information, "Received batch with [ {items} ]", string.Join(", ", batch.Items.Select(x => x.Item)));
+
+            foreach (var item in batch.Items)
+                await pending.Writer.WriteAsync(item, cancellation);
+
+            pending.Writer.Complete();
+
+            while (pending.Reader.Count > 0 && !batchCancellation.IsCancellationRequested)
+                yield return await pending.Reader.ReadAsync(cancellation);
+
+            await Flush(batch.Message, batch.Items);
+        }
+
+        async Task<(QueueMessage? Message, QueueMessage<T>[] Items)> NextBatch()
+        {
+            var msg = await queue.ReceiveMessageAsync(visibilityTimeout, cancellation);
+            var queueMessage = msg.Value;
+
+            if (queueMessage?.Body == null)
+                return (msg, Array.Empty<QueueMessage<T>>());
+
+            var messageBatch = MessageBatch<T>.Deserialize(queueMessage.Body.ToString());
+
+            return (msg, messageBatch.Items().Select(x => new QueueMessage<T>(x)).ToArray());
+        }
+
+        async Task Flush(QueueMessage message, QueueMessage<T>[] items)
+        {
+            var failed = items.Where(x => !x.Completed).ToArray();
+            if (failed.Any())
+                await UpdateOrQuarantine(message, failed);
+            else
+                await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellation);
+        }
+
+        async Task UpdateOrQuarantine(QueueMessage message, QueueMessage<T>[] items)
+        {
+            var body = Zip(items);
+
+            if (message.DequeueCount >= maxDequeueCount)
+            {
+                await quarantineQueue.SendMessageAsync(body, cancellation);
+                await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellation);
+
+                logger.Log(LogLevel.Information, "Sent batch to quarantine with items [ {items} ]", string.Join(", ", items.Select(x => x.Item)));
+            }
+            else
+                await queue.UpdateMessageAsync(message.MessageId, message.PopReceipt, body,
+                    cancellationToken: cancellation);
+        }
+
+        string Zip(IEnumerable<QueueMessage<T>> items) =>
+            new MessageBatch<T>(items.Select(x => x.Item).ToList(), SerializerType.GZipCompressed)
+                .Serialize();
     }
 
     public async Task<BatchItem<T>[]> ReceiveBatch(CancellationToken ct = default)
@@ -191,4 +266,14 @@ public class BatchQueue<T>
     }
 
     public string Name() => queue.Name;
+}
+
+public class QueueMessage<T>
+{
+    public QueueMessage(T item) => Item = item;
+
+    public T Item { get; }
+    public bool Completed { get; private set; }
+
+    public void Complete() => Completed = true;
 }
