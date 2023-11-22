@@ -9,13 +9,13 @@ namespace AzureBatchQueue;
 /// <typeparam name="T"></typeparam>
 public class QueueMessageBatch<T>
 {
-    private readonly BatchQueue<T> batchQueue;
-    private readonly MessageBatchOptions options;
-    private readonly HashSet<BatchItem<T>> BatchItems;
+    readonly BatchQueue<T> batchQueue;
+    readonly MessageBatchOptions options;
+    readonly HashSet<BatchItem<T>> BatchItems;
 
-    private readonly Timer timer;
-    private bool completed = false;
-    private readonly ILogger<BatchQueue<T>> logger;
+    readonly Timer timer;
+    bool completed = false;
+    readonly ILogger<BatchQueue<T>> logger;
 
     public QueueMessageBatch(BatchQueue<T> batchQueue, IEnumerable<T> items, MessageBatchOptions options,
         ILogger<BatchQueue<T>>? logger = null)
@@ -28,7 +28,7 @@ public class QueueMessageBatch<T>
         timer = new Timer(async _ => await Flush());
     }
 
-    private async Task Flush()
+    async Task Flush()
     {
         completed = true;
         await timer.DisposeAsync();
@@ -54,7 +54,7 @@ public class QueueMessageBatch<T>
         }
     }
 
-    private string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.SerializerType).Serialize();
+    string Serialize() => new MessageBatch<T>(BatchItems.Select(x => x.Item).ToList(), options.SerializerType).Serialize();
 
     public Task Complete(string id)
     {

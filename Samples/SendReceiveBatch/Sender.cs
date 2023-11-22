@@ -7,9 +7,9 @@ namespace SendReceiveBatch;
 
 public class Sender
 {
-    private BatchQueue<string> batchQueue;
-    private const int maxBatchSizeInBytes = 30;
-    private IMessageBatchSerializer<string> serializer;
+    BatchQueue<string> batchQueue;
+    const int maxBatchSizeInBytes = 30;
+    IMessageBatchSerializer<string> serializer;
 
     public Sender(string queueName, ILogger<BatchQueue<string>> logger, IMessageBatchSerializer<string> serializer)
     {
@@ -45,7 +45,7 @@ public class Sender
         Thread.Sleep(sleep);
     }
 
-    private IEnumerable<MessageBatch<string>> CreateBatches(IReadOnlyList<string>? words)
+    IEnumerable<MessageBatch<string>> CreateBatches(IReadOnlyList<string>? words)
     {
         if (words == null || words.Count == 0)
             return ArraySegment<MessageBatch<string>>.Empty;
@@ -72,7 +72,7 @@ public class Sender
         return batches;
     }
 
-    private static void Log(string message)
+    static void Log(string message)
     {
         Console.BackgroundColor = ConsoleColor.White;
         Console.ForegroundColor = ConsoleColor.Black;

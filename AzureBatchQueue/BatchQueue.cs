@@ -7,15 +7,15 @@ namespace AzureBatchQueue;
 
 public class BatchQueue<T>
 {
-    private readonly ILogger<BatchQueue<T>> logger;
+    readonly ILogger<BatchQueue<T>> logger;
 
-    private readonly QueueClient queue;
-    private readonly QueueClient quarantineQueue;
-    private readonly bool initQuarantineQueue;
+    readonly QueueClient queue;
+    readonly QueueClient quarantineQueue;
+    readonly bool initQuarantineQueue;
 
-    private readonly TimeSpan flushPeriod;
-    private readonly int maxDequeueCount;
-    private readonly TimeSpan visibilityTimeout;
+    readonly TimeSpan flushPeriod;
+    readonly int maxDequeueCount;
+    readonly TimeSpan visibilityTimeout;
 
     public BatchQueue(
         string connectionString,
@@ -86,7 +86,7 @@ public class BatchQueue<T>
         return batch.Unpack();
     }
 
-    private QueueMessageBatch<T> QueueMessageBatch(QueueMessage queueMessage)
+    QueueMessageBatch<T> QueueMessageBatch(QueueMessage queueMessage)
     {
         var messageBatch = MessageBatch<T>.Deserialize(queueMessage.Body.ToString());
 
@@ -94,7 +94,7 @@ public class BatchQueue<T>
         return new QueueMessageBatch<T>(this, messageBatch.Items(), batchOptions, logger);
     }
 
-    private async Task QuarantineMessage(string body, MessageBatchOptions batchOptions, string reason, CancellationToken ct = default)
+    async Task QuarantineMessage(string body, MessageBatchOptions batchOptions, string reason, CancellationToken ct = default)
     {
         try
         {

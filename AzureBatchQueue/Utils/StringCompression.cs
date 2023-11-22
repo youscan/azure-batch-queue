@@ -43,7 +43,7 @@ public static class StringCompression
         return DecompressInternal(fromBase64String);
     }
 
-    private static string DecompressInternal(byte[] fromBase64String)
+    static string DecompressInternal(byte[] fromBase64String)
     {
         byte[] decompressedBytes;
         var compressedStream = new MemoryStream(fromBase64String);

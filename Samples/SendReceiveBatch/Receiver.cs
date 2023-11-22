@@ -5,9 +5,9 @@ namespace SendReceiveBatch;
 
 public class Receiver
 {
-    private BatchQueue<string> batchQueue;
+    BatchQueue<string> batchQueue;
     public string[] DoNotComplete = { "four", "six" };
-    private bool canceled = false;
+    bool canceled = false;
 
     public Receiver(string queueName, ILogger<BatchQueue<string>>? logger)
     {
@@ -54,7 +54,7 @@ public class Receiver
         Thread.Sleep(sleep);
     }
 
-    private static void Log(string message)
+    static void Log(string message)
     {
         Console.BackgroundColor = ConsoleColor.White;
         Console.ForegroundColor = ConsoleColor.DarkBlue;

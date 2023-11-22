@@ -6,14 +6,14 @@ namespace AzureBatchQueue;
 
 public class MessageBatch<T>
 {
-    private readonly List<T> items = new();
+    readonly List<T> items = new();
     public List<T> Items() => items;
 
-    private int MaxSizeInBytes { get; init; }
+    int MaxSizeInBytes { get; init; }
     public const int AzureQueueMaxSizeInBytes = 49_000; // ~ 48 KB
     public SerializerType SerializerType { get; init; }
-    private readonly IMessageBatchSerializer<T> serializer;
-    private int? batchSize;
+    readonly IMessageBatchSerializer<T> serializer;
+    int? batchSize;
 
     public MessageBatch(IMessageBatchSerializer<T> serializer, int maxSizeInBytes = AzureQueueMaxSizeInBytes)
     {
@@ -54,7 +54,7 @@ public class MessageBatch<T>
         return false;
     }
 
-    private int CalculateItemsSize() => serializer.GetSize(items);
+    int CalculateItemsSize() => serializer.GetSize(items);
     public string Serialize() => serializer.Serialize(this);
     public int GetBatchSizeInBytes() => batchSize ?? CalculateItemsSize();
 
@@ -76,7 +76,7 @@ public class MessageBatch<T>
         return new MessageBatch<T>(items.ToList(), data.SerializerType);
     }
 
-    private static IMessageBatchSerializer<T> GetSerializer(SerializerType serializerType) =>
+    static IMessageBatchSerializer<T> GetSerializer(SerializerType serializerType) =>
         serializerType switch
         {
             SerializerType.Json => new JsonSerializer<T>(),

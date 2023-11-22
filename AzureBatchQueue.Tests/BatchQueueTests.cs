@@ -7,10 +7,10 @@ namespace AzureBatchQueue.Tests;
 [TestFixture]
 public class BatchQueueTests
 {
-    private record TestItem(string Name, int Age);
+    record TestItem(string Name, int Age);
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
 
-    private BatchQueue<TestItem> batchQueue;
+    BatchQueue<TestItem> batchQueue;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -149,10 +149,10 @@ public class BatchQueueTests
         batchItems2Updated.Length.Should().Be(1);
     }
 
-    private static MessageBatch<TestItem> CompressedBatch(params TestItem[] items) => Batch(new GZipCompressedSerializer<TestItem>(), items);
-    private static MessageBatch<TestItem> Batch(params TestItem[] items) => Batch(new JsonSerializer<TestItem>(), items);
+    static MessageBatch<TestItem> CompressedBatch(params TestItem[] items) => Batch(new GZipCompressedSerializer<TestItem>(), items);
+    static MessageBatch<TestItem> Batch(params TestItem[] items) => Batch(new JsonSerializer<TestItem>(), items);
 
-    private static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer, TestItem[] items)
+    static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer, TestItem[] items)
     {
         serializer ??= new JsonSerializer<TestItem>();
         var batch = new MessageBatch<TestItem>(serializer);
@@ -166,7 +166,7 @@ public class BatchQueueTests
         return batch;
     }
 
-    private async Task WaitTillFlush() => await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+    async Task WaitTillFlush() => await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
 
-    private static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
+    static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
 }

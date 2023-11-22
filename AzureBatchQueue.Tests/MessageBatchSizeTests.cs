@@ -7,9 +7,9 @@ namespace AzureBatchQueue.Tests;
 public class BatchMessageSizeTests
 {
     TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
-    private const int AzureQueueMaxAllowedSize = 49_126; // ~ 48 KB
+    const int AzureQueueMaxAllowedSize = 49_126; // ~ 48 KB
 
-    private BatchQueue<byte[]> batchQueue;
+    BatchQueue<byte[]> batchQueue;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -34,7 +34,7 @@ public class BatchMessageSizeTests
         return Task.CompletedTask;
     }
 
-    private static MessageBatch<byte[]> BatchOfSize(int bytes, bool compress)
+    static MessageBatch<byte[]> BatchOfSize(int bytes, bool compress)
     {
         var serializerType = compress ? SerializerType.GZipCompressed : SerializerType.Json;
 

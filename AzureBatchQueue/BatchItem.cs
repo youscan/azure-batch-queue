@@ -10,7 +10,7 @@ public class BatchItem<T>
     }
 
     public string Id { get; }
-    private QueueMessageBatch<T> Batch { get; }
+    QueueMessageBatch<T> Batch { get; }
     public T Item;
 
     public async Task Complete()

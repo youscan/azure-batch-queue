@@ -56,7 +56,7 @@ public class MessageBatchTests
         compressedBatch.Items().Count.Should().BeGreaterThan(batch.Items().Count);
     }
 
-    private record TestItem(string Name, int Age, string Country);
+    record TestItem(string Name, int Age, string Country);
 
-    private IMessageBatchSerializer<T> GetSerializer<T>(bool compressed) => compressed ? new GZipCompressedSerializer<T>() : new JsonSerializer<T>();
+    IMessageBatchSerializer<T> GetSerializer<T>(bool compressed) => compressed ? new GZipCompressedSerializer<T>() : new JsonSerializer<T>();
 }

@@ -5,9 +5,9 @@ namespace AzureBatchQueue.Tests;
 
 public class QuarantineTests
 {
-    private BatchQueue<TestItem> batchQueue;
+    BatchQueue<TestItem> batchQueue;
     TimeSpan flushPeriod = TimeSpan.FromMilliseconds(100);
-    private const int maxDequeueCount = 2;
+    const int maxDequeueCount = 2;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -59,7 +59,7 @@ public class QuarantineTests
         receivedItem.Should().BeEquivalentTo(originalBatch.Items().Single());
     }
 
-    private async Task ReceiveBatch(int dequeueCount)
+    async Task ReceiveBatch(int dequeueCount)
     {
         for (var i = 0; i < dequeueCount; i++)
         {
@@ -71,8 +71,9 @@ public class QuarantineTests
         }
     }
 
-    private static MessageBatch<TestItem> Batch() => new(new List<TestItem> { new("Ivan", 12) }, SerializerType.Json);
+    static MessageBatch<TestItem> Batch() => new(new List<TestItem> { new("Ivan", 12) }, SerializerType.Json);
 
-    private record TestItem(string Name, int Age);
-    private static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
+    record TestItem(string Name, int Age);
+
+    static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
 }
