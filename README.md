@@ -8,14 +8,9 @@ Send batches of items in a single QueueMessage via Azure Storage Queue
 ### Prepare the Queue storage
 All tests and samples use the Azurite emulator for local Azure Storage development.
 #### Run Azurite
-1. Install [azurite](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azurite?).
-Run from the AzureBatchQueue solution folder:
+Start azurite in a Docker container. Run from AzureBatchQueue folder this command:
 ```
-make azurite-pull
-```
-2. Launch Azurite by issuing the following command from the AzureBatchQueue solution folder:
-```
-make azurite-up
+make start-storage
 ```
 
 ### Run tests and samples from the command line or your IDE
