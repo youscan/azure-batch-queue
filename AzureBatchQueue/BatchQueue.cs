@@ -82,14 +82,13 @@ public class BatchQueue<T>
         while (!cancellation.IsCancellationRequested)
         {
             var pending = Channel.CreateUnbounded<QueueMessage<T>>();
-            var batchCancellation = new CancellationTokenSource();
 
             var batch = await NextBatch();
 
             if (batch.Message == null)
                 continue;
 
-            batchCancellation.CancelAfter(flushPeriod);
+            var flushWait = Task.Delay(flushPeriod, cancellation);
 
             if (batch.Items.Any())
                 logger.Log(LogLevel.Information, "Received batch with [ {items} ]", string.Join(", ", batch.Items.Select(x => x.Item)));
@@ -99,8 +98,13 @@ public class BatchQueue<T>
 
             pending.Writer.Complete();
 
-            while (pending.Reader.Count > 0 && !batchCancellation.IsCancellationRequested)
+            while (pending.Reader.Count > 0 && !flushWait.IsCompleted)
                 yield return await pending.Reader.ReadAsync(cancellation);
+
+            await Task.WhenAny(
+                Task.WhenAll(batch.Items.Select(x => x.Completion)),
+                flushWait
+            );
 
             await Flush(batch.Message, batch.Items);
         }
@@ -120,7 +124,7 @@ public class BatchQueue<T>
 
         async Task Flush(QueueMessage message, QueueMessage<T>[] items)
         {
-            var failed = items.Where(x => !x.Completed).ToArray();
+            var failed = items.Where(x => !x.Completion.IsCompleted).ToArray();
             if (failed.Any())
                 await UpdateOrQuarantine(message, failed);
             else
@@ -270,10 +274,16 @@ public class BatchQueue<T>
 
 public class QueueMessage<T>
 {
-    public QueueMessage(T item) => Item = item;
+    private readonly TaskCompletionSource completion;
+
+    public QueueMessage(T item)
+    {
+        completion = new TaskCompletionSource();
+        Item = item;
+    }
 
     public T Item { get; }
-    public bool Completed { get; private set; }
 
-    public void Complete() => Completed = true;
+    public Task Completion => completion.Task;
+    public void Complete() => completion.SetResult();
 }

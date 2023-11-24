@@ -65,14 +65,31 @@ public class BatchQueueTests
     }
 
     [Test]
-    public async Task Complete()
+    public async Task Does_not_take_next_butch_till_the_current_one_completed()
     {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
+        var first = new TestItem("Dimka", 33);
+        var second = new TestItem("Yaroslav", 26);
 
-        var batchItems = await batchQueue.ReceiveBatch();
-        foreach (var batchItem in batchItems) await batchItem.Complete();
+        await batchQueue.SendBatch(Batch(first));
+        await batchQueue.SendBatch(Batch(second));
 
-        (await batchQueue.ReceiveBatch()).Length.Should().Be(0);
+        var enumerator = batchQueue.Receive().GetAsyncEnumerator();
+        await enumerator.MoveNextAsync();
+
+        var current = enumerator.Current;
+
+        current.Item.Should().BeEquivalentTo(first);
+
+        var next = enumerator.MoveNextAsync().AsTask();
+
+        await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(1)));
+        next.IsCompleted.Should().BeFalse();
+
+        current.Complete();
+
+        await next;
+
+        enumerator.Current.Item.Should().BeEquivalentTo(second);
     }
 
     [Test]
