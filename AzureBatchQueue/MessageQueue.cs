@@ -26,6 +26,13 @@ public class MessageQueue<T>
 
     public async Task Send(T item, CancellationToken ct = default)
     {
+        var payload = await Payload(item, ct);
+
+        await queue.SendMessageAsync(new BinaryData(payload), null, null, ct);
+    }
+
+    async Task<byte[]> Payload(T item, CancellationToken ct)
+    {
         var payload = serialize(item);
         if (payload.Length > MaxMessageSize)
         {
@@ -34,7 +41,7 @@ public class MessageQueue<T>
             payload = JsonSerializer.SerializeToUtf8Bytes(blobRef);
         }
 
-        await queue.SendMessageAsync(new BinaryData(payload), null, null, ct);
+        return payload;
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
@@ -42,6 +49,13 @@ public class MessageQueue<T>
         await queue.DeleteMessageAsync(id.Id, id.PopReceipt, ct);
         if (id.BlobName is not null)
             await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
+    }
+
+    public async Task UpdateMessage(QueueMessage<T> message)
+    {
+        var payload = serialize(message.Item);
+
+        await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), TimeSpan.FromSeconds(0));
     }
 
     public async Task<QueueMessage<T>[]> Receive(int? maxMessages = null, CancellationToken ct = default)
