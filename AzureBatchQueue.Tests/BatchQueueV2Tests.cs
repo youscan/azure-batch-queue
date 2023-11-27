@@ -45,6 +45,29 @@ public class BatchQueueV2Tests
         updatedResponse.Single().Item.Should().Be("orange");
     }
 
+    [Test]
+    public async Task When_batch_flushes_after_all_complete()
+    {
+        var longFlushPeriod = TimeSpan.FromMinutes(10);
+        using var queueTest = await Queue<string>(longFlushPeriod);
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var visibilityTimeout = TimeSpan.FromSeconds(1);
+        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        foreach (var item in response)
+            item.Complete();
+
+        // wait for message to become available for read if it's not completed
+        await Task.Delay(visibilityTimeout);
+
+        var updatedResponse = await queueTest.BatchQueue.Receive();
+        updatedResponse.Should().BeEmpty();
+    }
+
     static async Task<BatchQueueTest<T>> Queue<T>(TimeSpan flushPeriod)
     {
         var queue = new BatchQueueTest<T>();

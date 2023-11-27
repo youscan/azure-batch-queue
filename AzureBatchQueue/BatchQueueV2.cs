@@ -14,9 +14,10 @@ public class BatchQueueV2<T>
 
     public async Task Send(T[] items) => await queue.Send(items);
 
-    public async Task<BatchItemV2<T>[]> Receive(int? maxMessages = null, CancellationToken ct = default)
+    public async Task<BatchItemV2<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+        CancellationToken ct = default)
     {
-        var arrayOfBatches = await queue.Receive(maxMessages, ct);
+        var arrayOfBatches = await queue.Receive(maxMessages, visibilityTimeout, ct: ct);
 
         var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, flushPeriod)).ToList();
 
@@ -86,6 +87,9 @@ public class TimerBatch<T>
     public void Complete(string itemId)
     {
         items.RemoveWhere(x => x.Id == itemId);
+
+        if (!items.Any())
+            timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
     }
 
     public IEnumerable<BatchItemV2<T>> Unpack()

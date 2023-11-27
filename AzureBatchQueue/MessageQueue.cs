@@ -58,9 +58,10 @@ public class MessageQueue<T>
         await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), TimeSpan.FromSeconds(0));
     }
 
-    public async Task<QueueMessage<T>[]> Receive(int? maxMessages = null, CancellationToken ct = default)
+    public async Task<QueueMessage<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+        CancellationToken ct = default)
     {
-        var r = await queue.ReceiveMessagesAsync(maxMessages, cancellationToken: ct);
+        var r = await queue.ReceiveMessagesAsync(maxMessages, visibilityTimeout, cancellationToken: ct);
         return await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct)));
     }
 
