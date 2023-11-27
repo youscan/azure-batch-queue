@@ -23,6 +23,7 @@ public class Receiver
     public async Task Receive()
     {
         Log("Start receiving.");
+        var messages = new List<QueueMessage<string>>();
 
         await foreach (var batchItem in batchQueue.Receive())
         {
@@ -32,8 +33,15 @@ public class Receiver
                 continue;
             }
 
-            Log($"Completed {batchItem.Item}");
-            batchItem.Complete();
+            messages.Add(batchItem);
+        }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        foreach (var msg in messages)
+        {
+            Log($"Completed {msg.Item}");
+            msg.Complete();
         }
 
         Log("Finish receiving items.");
