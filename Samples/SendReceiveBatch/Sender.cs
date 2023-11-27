@@ -35,7 +35,6 @@ public class Sender
             await batchQueue.SendBatch(batch);
 
             Log($"Sent a batch {JsonConvert.SerializeObject(batch.Items())} of size {batch.GetBatchSizeInBytes()} bytes.");
-            Sleep(TimeSpan.FromSeconds(5));
         }
     }
 

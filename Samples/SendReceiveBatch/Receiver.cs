@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using AzureBatchQueue;
 using Microsoft.Extensions.Logging;
 
@@ -23,9 +24,18 @@ public class Receiver
     public async Task Receive()
     {
         Log("Start receiving.");
-        var messages = new List<QueueMessage<string>>();
+        var pending = Channel.CreateUnbounded<QueueMessage<string>>();
 
-        await foreach (var batchItem in batchQueue.Receive())
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(300));
+                (await pending.Reader.ReadAsync()).Complete();
+            }
+        });
+
+        await foreach (var batchItem in batchQueue.Poll())
         {
             if (DoNotComplete.Contains(batchItem.Item))
             {
@@ -33,15 +43,7 @@ public class Receiver
                 continue;
             }
 
-            messages.Add(batchItem);
-        }
-
-        await Task.Delay(TimeSpan.FromMilliseconds(300));
-
-        foreach (var msg in messages)
-        {
-            Log($"Completed {msg.Item}");
-            msg.Complete();
+            await pending.Writer.WriteAsync(batchItem);
         }
 
         Log("Finish receiving items.");

@@ -75,6 +75,20 @@ public class BatchQueue<T>
         return items.ToArray();
     }
 
+    public async IAsyncEnumerable<QueueMessage<T>> Poll([EnumeratorCancellation] CancellationToken cancellation = default)
+    {
+        var output = Channel.CreateUnbounded<QueueMessage<T>>();
+
+        _ = Enumerable.Range(0, 10).Select(async _ =>
+        {
+            await foreach (var queueMessage in Receive(cancellation))
+                await output.Writer.WriteAsync(queueMessage, cancellation);
+        }).ToArray();
+
+        while (!cancellation.IsCancellationRequested)
+            yield return await output.Reader.ReadAsync(cancellation);
+    }
+
     public async IAsyncEnumerable<QueueMessage<T>> Receive([EnumeratorCancellation] CancellationToken cancellation = default)
     {
         logger.Log(LogLevel.Information, "Start enumeration");
@@ -109,6 +123,8 @@ public class BatchQueue<T>
             await Flush(batch.Message, batch.Items);
         }
 
+        yield break;
+
         async Task<(QueueMessage? Message, QueueMessage<T>[] Items)> NextBatch()
         {
             var msg = await queue.ReceiveMessageAsync(visibilityTimeout, cancellation);
@@ -126,9 +142,17 @@ public class BatchQueue<T>
         {
             var failed = items.Where(x => !x.Completion.IsCompleted).ToArray();
             if (failed.Any())
+            {
+                var s = string.Join(", ", failed.Select(x => x.Item.ToString()));
+                logger.LogInformation($"Sending to quarantine or updating [ {s} ]");
                 await UpdateOrQuarantine(message, failed);
+            }
             else
+            {
+                var s = string.Join(", ", items.Select(x => x.Item.ToString()));
+                logger.LogInformation($"Completing [ {s} ]");
                 await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellation);
+            }
         }
 
         async Task UpdateOrQuarantine(QueueMessage message, QueueMessage<T>[] items)
