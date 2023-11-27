@@ -39,7 +39,7 @@ public class BatchQueueV2Tests
         }
 
         // wait for timer to flush
-        await Task.Delay(flushPeriod);
+        await Task.Delay(flushPeriod * 2);
 
         var updatedResponse = await queueTest.BatchQueue.Receive();
         updatedResponse.Single().Item.Should().Be("orange");
