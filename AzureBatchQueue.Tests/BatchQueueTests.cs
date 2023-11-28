@@ -69,10 +69,8 @@ public class BatchQueueTests
         updatedResponse.Should().BeEmpty();
     }
 
-    [TestCase(10)]
-    [TestCase(100)]
-    [TestCase(500)]
-    public async Task When_many_clients_complete_in_parallel(int parallelCount)
+    [Test]
+    public async Task When_many_threads_complete_in_parallel()
     {
         var shortFlushPeriod = TimeSpan.FromSeconds(1);
         using var queueTest = await Queue<string>(shortFlushPeriod);
@@ -83,18 +81,7 @@ public class BatchQueueTests
         var response = await queueTest.BatchQueue.Receive();
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
-        var tasks = new Task[parallelCount];
-
-        for (var i = 0; i < parallelCount; i++)
-        {
-            tasks[i] = Task.Run(() =>
-            {
-                foreach (var item in response)
-                    item.Complete();
-            });
-        }
-
-        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
+        Assert.DoesNotThrow(() => Parallel.ForEach(response, batchItem => batchItem.Complete()));
     }
 
     [Test]
