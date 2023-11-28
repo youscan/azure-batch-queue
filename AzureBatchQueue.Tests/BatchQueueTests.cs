@@ -180,6 +180,23 @@ public class BatchQueueTests
         completeSecond.Should().BeFalse();
     }
 
+    [Test]
+    public async Task When_completing_item_after_batch_was_flushed()
+    {
+        var flushPeriod = TimeSpan.FromMilliseconds(200);
+        using var queueTest = await Queue<string>(flushPeriod);
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+
+        // wait for batch to be flushed
+        await Task.Delay(flushPeriod * 2);
+
+        Assert.Throws<BatchCompletedException>(() => response.Single().Complete());
+    }
+
     static async Task<BatchQueueTest<T>> Queue<T>(TimeSpan flushPeriod, int maxDequeueCount = 5)
     {
         var queue = new BatchQueueTest<T>();

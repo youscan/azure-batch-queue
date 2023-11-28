@@ -13,6 +13,7 @@ public class TimerBatch<T>
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
     readonly Timer timer;
+    bool completed;
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, TimeSpan flushPeriod, int maxDequeueCount,
         ILogger<BatchQueue<T>> logger)
@@ -25,6 +26,7 @@ public class TimerBatch<T>
         items = new ConcurrentDictionary<string, BatchItem<T>>(
             msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToDictionary(item => item.Id));
         timer = new Timer(async _ => await Flush());
+        completed = false;
     }
 
     async Task Flush()
@@ -32,6 +34,7 @@ public class TimerBatch<T>
         try
         {
             await timer.DisposeAsync();
+            completed = true;
 
             await DoFlush();
         }
@@ -77,6 +80,9 @@ public class TimerBatch<T>
 
     public bool Complete(string itemId)
     {
+        if (completed)
+            throw new BatchCompletedException($"Failed to complete item {itemId} on an already finalized batch {msg.MessageId}");
+
         var res = items.TryRemove(itemId, out _);
         if (!res)
             return false;
@@ -92,4 +98,9 @@ public class TimerBatch<T>
         timer.Change(flushPeriod, Timeout.InfiniteTimeSpan);
         return items.Values.ToArray();
     }
+}
+
+public class BatchCompletedException : Exception
+{
+    public BatchCompletedException(string s) : base(s) { }
 }
