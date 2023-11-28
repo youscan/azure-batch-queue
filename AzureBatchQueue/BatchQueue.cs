@@ -8,6 +8,7 @@ public class BatchQueue<T>
     readonly ILogger<BatchQueue<T>> logger;
 
     readonly TimeSpan flushPeriod;
+    readonly TimeSpan receiveVisibilityTimeout;
     readonly MessageQueue<T[]> queue;
 
     public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod, ILogger<BatchQueue<T>>? logger = null)
@@ -15,6 +16,7 @@ public class BatchQueue<T>
         queue = new MessageQueue<T[]>(connectionString, queueName);
 
         this.flushPeriod = flushPeriod;
+        receiveVisibilityTimeout = flushPeriod.Add(TimeSpan.FromSeconds(5));
         this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
     }
 
@@ -25,7 +27,7 @@ public class BatchQueue<T>
     public async Task<BatchItem<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
         CancellationToken ct = default)
     {
-        var arrayOfBatches = await queue.Receive(maxMessages, visibilityTimeout, ct: ct);
+        var arrayOfBatches = await queue.Receive(maxMessages, visibilityTimeout ?? receiveVisibilityTimeout, ct: ct);
 
         var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, flushPeriod, logger)).ToList();
 
