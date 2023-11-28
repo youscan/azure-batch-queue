@@ -42,6 +42,11 @@ public class TimerBatch<T>
         {
             logger.LogError(ex, "Accessing already flushed message with {messageId}.", msg.MessageId);
         }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception when flushing message {messageId}.", msg.MessageId);
+            throw;
+        }
 
         async Task DoFlush()
         {
