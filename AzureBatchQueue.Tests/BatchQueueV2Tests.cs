@@ -68,6 +68,34 @@ public class BatchQueueV2Tests
         updatedResponse.Should().BeEmpty();
     }
 
+    [TestCase(10)]
+    [TestCase(100)]
+    [TestCase(500)]
+    public async Task When_many_clients_complete_in_parallel(int parallelCount)
+    {
+        var shortFlushPeriod = TimeSpan.FromSeconds(1);
+        using var queueTest = await Queue<string>(shortFlushPeriod);
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        var tasks = new Task[parallelCount];
+
+        for (var i = 0; i < parallelCount; i++)
+        {
+            tasks[i] = Task.Run(() =>
+            {
+                foreach (var item in response)
+                    item.Complete();
+            });
+        }
+
+        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
+    }
+
     static async Task<BatchQueueTest<T>> Queue<T>(TimeSpan flushPeriod)
     {
         var queue = new BatchQueueTest<T>();

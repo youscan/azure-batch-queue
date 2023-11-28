@@ -53,6 +53,7 @@ public class TimerBatch<T>
     readonly QueueMessage<T[]> msg;
     readonly TimeSpan flushPeriod;
     readonly HashSet<BatchItemV2<T>> items;
+
     readonly Timer timer;
 
     public TimerBatch(BatchQueueV2<T> batchQueue, QueueMessage<T[]> msg, TimeSpan flushPeriod)
@@ -68,13 +69,21 @@ public class TimerBatch<T>
     {
         await timer.DisposeAsync();
 
-        if (!items.Any())
+        try
         {
-            await batchQueue.DeleteMessage(msg.MessageId);
+            await DoFlush();
         }
-        else
+        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
         {
-            await batchQueue.UpdateMessage(Message());
+            // log missing queue (happens in tests when multiple threads try to complete the batch)
+        }
+
+        async Task DoFlush()
+        {
+            if (!items.Any())
+                await batchQueue.DeleteMessage(msg.MessageId);
+            else
+                await batchQueue.UpdateMessage(Message());
         }
     }
 
@@ -89,7 +98,19 @@ public class TimerBatch<T>
         items.RemoveWhere(x => x.Id == itemId);
 
         if (!items.Any())
+            TriggerFlush();
+    }
+
+    void TriggerFlush()
+    {
+        try
+        {
             timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // log MessageBatchCompletedException($"MessageBatch {msg.MessageId} is already completed;");
+        }
     }
 
     public IEnumerable<BatchItemV2<T>> Unpack()
