@@ -42,10 +42,6 @@ public class TimerBatch<T>
         {
             logger.LogError(ex, "Accessing already flushed message with {messageId}.", msg.MessageId);
         }
-        catch (ObjectDisposedException)
-        {
-            logger.LogWarning("Timer in messageBatch {messageId} has already been disposed.", msg.MessageId);
-        }
 
         async Task DoFlush()
         {
