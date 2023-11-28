@@ -30,19 +30,16 @@ public class Receiver
         {
             while (true)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(300));
-                (await pending.Reader.ReadAsync()).Complete();
+                await Task.Delay(TimeSpan.FromMilliseconds(00));
+                var message = await pending.Reader.ReadAsync();
+                message.Complete();
+                Log($"Item {{ {message.Item} }} completed");
             }
         });
 
-        await foreach (var batchItem in batchQueue.Poll())
+        await foreach (var batchItem in batchQueue.Receive())
         {
-            if (DoNotComplete.Contains(batchItem.Item))
-            {
-                Log($"Will not complete {batchItem.Item}");
-                continue;
-            }
-
+            Log($"Item {{ {batchItem.Item} }} received");
             await pending.Writer.WriteAsync(batchItem);
         }
 

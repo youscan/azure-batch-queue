@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Logging;
@@ -75,83 +74,59 @@ public class BatchQueue<T>
         return items.ToArray();
     }
 
-    public async IAsyncEnumerable<QueueMessage<T>> Poll([EnumeratorCancellation] CancellationToken cancellation = default)
-    {
-        var output = Channel.CreateUnbounded<QueueMessage<T>>();
-
-        _ = Enumerable.Range(0, 10).Select(async _ =>
-        {
-            await foreach (var queueMessage in Receive(cancellation))
-                await output.Writer.WriteAsync(queueMessage, cancellation);
-        }).ToArray();
-
-        while (!cancellation.IsCancellationRequested)
-            yield return await output.Reader.ReadAsync(cancellation);
-    }
-
     public async IAsyncEnumerable<QueueMessage<T>> Receive([EnumeratorCancellation] CancellationToken cancellation = default)
     {
         logger.Log(LogLevel.Information, "Start enumeration");
 
         while (!cancellation.IsCancellationRequested)
         {
-            var pending = Channel.CreateUnbounded<QueueMessage<T>>();
-
             var batch = await NextBatch();
 
             if (batch.Message == null)
                 continue;
 
-            var flushWait = Task.Delay(flushPeriod, cancellation);
+            _ = Task.Run(async () =>
+            {
+                await batch.Completion;
+                await Flush(batch);
+            }, cancellation);
 
-            if (batch.Items.Any())
-                logger.Log(LogLevel.Information, "Received batch with [ {items} ]", string.Join(", ", batch.Items.Select(x => x.Item)));
+            foreach (var queueMessage in batch.Items)
+            {
+                if (batch.Completion.IsCompleted || cancellation.IsCancellationRequested)
+                    break;
 
-            foreach (var item in batch.Items)
-                await pending.Writer.WriteAsync(item, cancellation);
-
-            pending.Writer.Complete();
-
-            while (pending.Reader.Count > 0 && !flushWait.IsCompleted)
-                yield return await pending.Reader.ReadAsync(cancellation);
-
-            await Task.WhenAny(
-                Task.WhenAll(batch.Items.Select(x => x.Completion)),
-                flushWait
-            );
-
-            await Flush(batch.Message, batch.Items);
+                yield return queueMessage;
+            }
         }
 
         yield break;
 
-        async Task<(QueueMessage? Message, QueueMessage<T>[] Items)> NextBatch()
+        async Task<TimerlessQueueMessageBatch> NextBatch()
         {
             var msg = await queue.ReceiveMessageAsync(visibilityTimeout, cancellation);
             var queueMessage = msg.Value;
 
             if (queueMessage?.Body == null)
-                return (msg, Array.Empty<QueueMessage<T>>());
+                return TimerlessQueueMessageBatch.Empty();
 
             var messageBatch = MessageBatch<T>.Deserialize(queueMessage.Body.ToString());
 
-            return (msg, messageBatch.Items().Select(x => new QueueMessage<T>(x)).ToArray());
+            return new TimerlessQueueMessageBatch(queueMessage, messageBatch.Items(), flushPeriod);
         }
 
-        async Task Flush(QueueMessage message, QueueMessage<T>[] items)
+        async Task Flush(TimerlessQueueMessageBatch batch)
         {
-            var failed = items.Where(x => !x.Completion.IsCompleted).ToArray();
+            var failed = batch.Items.Where(x => !x.Completion.IsCompleted).ToArray();
             if (failed.Any())
             {
-                var s = string.Join(", ", failed.Select(x => x.Item.ToString()));
-                logger.LogInformation($"Sending to quarantine or updating [ {s} ]");
-                await UpdateOrQuarantine(message, failed);
+                logger.LogDebug("Sending to quarantine or updating batch [ {items} ]", failed.Select(x => x.Item!.ToString()));
+                await UpdateOrQuarantine(batch.Message!, failed);
             }
             else
             {
-                var s = string.Join(", ", items.Select(x => x.Item.ToString()));
-                logger.LogInformation($"Completing [ {s} ]");
-                await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellation);
+                logger.LogDebug("Completing batch [ {items} ]", batch.Items.Select(x => x.Item!.ToString()));
+                await queue.DeleteMessageAsync(batch.Message!.MessageId, batch.Message.PopReceipt, cancellation);
             }
         }
 
@@ -294,11 +269,39 @@ public class BatchQueue<T>
     }
 
     public string Name() => queue.Name;
+
+    class TimerlessQueueMessageBatch
+    {
+        readonly Task completionTimedOut;
+
+        TimerlessQueueMessageBatch()
+        {
+            completionTimedOut = Task.CompletedTask;
+            Items = Enumerable.Empty<QueueMessage<T>>();
+        }
+
+        public TimerlessQueueMessageBatch(QueueMessage queueMessage, IEnumerable<T> items, TimeSpan completionTimeout)
+        {
+            completionTimedOut = Task.Delay(completionTimeout);
+            Items = items.Select(x => new QueueMessage<T>(x)).ToArray();
+            Message = queueMessage;
+        }
+
+        public IEnumerable<QueueMessage<T>> Items { get; }
+
+        public Task Completion => Task.WhenAny(
+            Task.WhenAll(Items.Select(x => x.Completion)),
+            completionTimedOut);
+
+        public QueueMessage? Message { get; }
+
+        public static TimerlessQueueMessageBatch Empty() => new();
+    }
 }
 
 public class QueueMessage<T>
 {
-    private readonly TaskCompletionSource completion;
+    readonly TaskCompletionSource completion;
 
     public QueueMessage(T item)
     {
