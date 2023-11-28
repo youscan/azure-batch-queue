@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace AzureBatchQueue;
@@ -9,7 +10,7 @@ public class TimerBatch<T>
     readonly TimeSpan flushPeriod;
     readonly int maxDequeueCount;
     readonly ILogger<BatchQueue<T>> logger;
-    readonly HashSet<BatchItem<T>> items;
+    readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
     readonly Timer timer;
 
@@ -21,7 +22,8 @@ public class TimerBatch<T>
         this.flushPeriod = flushPeriod;
         this.maxDequeueCount = maxDequeueCount;
         this.logger = logger;
-        items = msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToHashSet();
+        items = new ConcurrentDictionary<string, BatchItem<T>>(
+            msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToDictionary(item => item.Id));
         timer = new Timer(async _ => await Flush());
     }
 
@@ -50,7 +52,7 @@ public class TimerBatch<T>
 
         async Task DoFlush()
         {
-            if (!items.Any())
+            if (items.IsEmpty)
             {
                 await Delete();
                 return;
@@ -69,33 +71,25 @@ public class TimerBatch<T>
 
     QueueMessage<T[]> Message()
     {
-        var notCompletedItems = items.Select(x => x.Item).ToArray();
+        var notCompletedItems = items.Values.Select(x => x.Item).ToArray();
         return msg with { Item = notCompletedItems };
     }
 
-    public void Complete(string itemId)
+    public bool Complete(string itemId)
     {
-        items.RemoveWhere(x => x.Id == itemId);
+        var res = items.TryRemove(itemId, out _);
+        if (!res)
+            return false;
 
-        if (!items.Any())
-            TriggerFlush();
-    }
-
-    void TriggerFlush()
-    {
-        try
-        {
+        if (items.IsEmpty)
             timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
-        }
-        catch (ObjectDisposedException)
-        {
-            logger.LogWarning("Timer in messageBatch {messageId} has already been disposed.", msg.MessageId);
-        }
+
+        return true;
     }
 
     public IEnumerable<BatchItem<T>> Unpack()
     {
         timer.Change(flushPeriod, Timeout.InfiniteTimeSpan);
-        return items.ToArray();
+        return items.Values.ToArray();
     }
 }

@@ -13,5 +13,5 @@ public class BatchItem<T>
     public T Item { get; }
     TimerBatch<T> Batch { get; }
 
-    public void Complete() => Batch.Complete(Id);
+    public bool Complete() => Batch.Complete(Id);
 }

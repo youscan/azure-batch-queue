@@ -84,6 +84,34 @@ public class BatchQueueTests
         Assert.DoesNotThrow(() => Parallel.ForEach(response, batchItem => batchItem.Complete()));
     }
 
+    [TestCase(10)]
+    [TestCase(100)]
+    [TestCase(500)]
+    public async Task When_many_clients_complete_in_parallel(int parallelCount)
+    {
+        var shortFlushPeriod = TimeSpan.FromSeconds(1);
+        using var queueTest = await Queue<string>(shortFlushPeriod);
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        var tasks = new Task[parallelCount];
+
+        for (var i = 0; i < parallelCount; i++)
+        {
+            tasks[i] = Task.Run(() =>
+            {
+                foreach (var item in response)
+                    item.Complete();
+            });
+        }
+
+        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
+    }
+
     [Test]
     public async Task When_quarantine_whole_batch()
     {
@@ -133,6 +161,23 @@ public class BatchQueueTests
 
         var responseFromQuarantine = await queueTest.BatchQueue.ReceiveFromQuarantine();
         responseFromQuarantine.Select(x => x.Item).Should().BeEquivalentTo(failedItem);
+    }
+
+    [Test]
+    public async Task When_completing_same_item_twice()
+    {
+        using var queueTest = await Queue<string>(TimeSpan.FromMilliseconds(200));
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+
+        var completeFirst = response.Single().Complete();
+        var completeSecond = response.Single().Complete();
+
+        completeFirst.Should().BeTrue();
+        completeSecond.Should().BeFalse();
     }
 
     static async Task<BatchQueueTest<T>> Queue<T>(TimeSpan flushPeriod, int maxDequeueCount = 5)
