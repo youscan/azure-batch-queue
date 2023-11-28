@@ -2,7 +2,7 @@ namespace AzureBatchQueue;
 
 public class BatchItem<T>
 {
-    public BatchItem(string id, QueueMessageBatch<T> batch, T item)
+    public BatchItem(string id, TimerBatch<T> batch, T item)
     {
         Id = id;
         Batch = batch;
@@ -10,11 +10,8 @@ public class BatchItem<T>
     }
 
     public string Id { get; }
-    QueueMessageBatch<T> Batch { get; }
-    public T Item;
+    public T Item { get; }
+    TimerBatch<T> Batch { get; }
 
-    public async Task Complete()
-    {
-        await Batch.Complete(Id);
-    }
+    public void Complete() => Batch.Complete(Id);
 }

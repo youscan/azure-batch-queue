@@ -24,6 +24,8 @@ public class MessageQueue<T>
         this.deserialize = deserialize ?? (v => JsonSerializer.Deserialize<T>(v.Span)!);
     }
 
+    public string Name => queue.Name;
+
     public async Task Send(T item, CancellationToken ct = default)
     {
         var payload = await Payload(item, ct);

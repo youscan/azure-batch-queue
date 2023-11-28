@@ -26,7 +26,7 @@ public class Receiver
 
         while (!canceled)
         {
-            var batchItems = await batchQueue.ReceiveBatch();
+            var batchItems = await batchQueue.Receive();
 
             Log($"Received batch with {batchItems.Length} items.");
 
@@ -39,7 +39,7 @@ public class Receiver
                 }
 
                 Log($"Completed {batchItem.Item}");
-                await batchItem.Complete();
+                batchItem.Complete();
             }
 
             Sleep(TimeSpan.FromSeconds(2));

@@ -19,8 +19,8 @@ public class Sender
 
     public async Task Init()
     {
+        await batchQueue.Delete();
         await batchQueue.Init();
-        await batchQueue.ClearMessages();
         Log("Sender is ready.");
     }
 
@@ -32,7 +32,7 @@ public class Sender
 
         foreach (var batch in batches)
         {
-            await batchQueue.SendBatch(batch);
+            await batchQueue.Send(batch.Items().ToArray());
 
             Log($"Sent a batch {JsonConvert.SerializeObject(batch.Items())} of size {batch.GetBatchSizeInBytes()} bytes.");
             Sleep(TimeSpan.FromSeconds(5));
