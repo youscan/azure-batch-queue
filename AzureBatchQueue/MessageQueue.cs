@@ -77,7 +77,7 @@ public class MessageQueue<T>
         }
 
         var item = deserialize(payload);
-        var msg = new QueueMessage<T>(item, new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName));
+        var msg = new QueueMessage<T>(item, new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName), m.DequeueCount);
         return msg;
     }
 
@@ -109,5 +109,5 @@ public class MessageQueue<T>
     }
 }
 
-public record QueueMessage<T>(T Item, MessageId MessageId);
+public record QueueMessage<T>(T Item, MessageId MessageId, long DequeueCount);
 public record MessageId(string Id, string PopReceipt, string? BlobName);

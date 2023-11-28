@@ -10,10 +10,14 @@ public class BatchQueue<T>
     readonly TimeSpan flushPeriod;
     readonly TimeSpan receiveVisibilityTimeout;
     readonly MessageQueue<T[]> queue;
+    readonly MessageQueue<T[]> quarantineQueue;
+    readonly int maxDequeueCount;
 
-    public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod, ILogger<BatchQueue<T>>? logger = null)
+    public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod, int maxDequeueCount = 5, ILogger<BatchQueue<T>>? logger = null)
     {
         queue = new MessageQueue<T[]>(connectionString, queueName);
+        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine");
+        this.maxDequeueCount = maxDequeueCount;
 
         this.flushPeriod = flushPeriod;
         receiveVisibilityTimeout = flushPeriod.Add(TimeSpan.FromSeconds(5));
@@ -25,18 +29,39 @@ public class BatchQueue<T>
     public async Task Send(T[] items) => await queue.Send(items);
 
     public async Task<BatchItem<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
-        CancellationToken ct = default)
-    {
-        var arrayOfBatches = await queue.Receive(maxMessages, visibilityTimeout ?? receiveVisibilityTimeout, ct: ct);
+        CancellationToken ct = default) => await ReceiveInternal(queue, maxMessages, visibilityTimeout, ct);
 
-        var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, flushPeriod, logger)).ToList();
+    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+        CancellationToken ct = default) => await ReceiveInternal(quarantineQueue, maxMessages, visibilityTimeout, ct);
+
+    async Task<BatchItem<T>[]> ReceiveInternal(MessageQueue<T[]> msgQueue, int? maxMessages, TimeSpan? visibilityTimeout, CancellationToken ct)
+    {
+        var arrayOfBatches = await msgQueue.Receive(maxMessages, visibilityTimeout ?? receiveVisibilityTimeout, ct: ct);
+
+        var timerBatches = arrayOfBatches
+            .Select(batch => new TimerBatch<T>(this, batch, flushPeriod, maxDequeueCount, logger)).ToList();
 
         return timerBatches.SelectMany(x => x.Unpack()).ToArray();
     }
 
-    public async Task Init() => await queue.Init();
-    public async Task Delete() => await queue.Delete();
+    public async Task Init() => await Task.WhenAll(queue.Init(), quarantineQueue.Init());
+    public async Task Delete() => await Task.WhenAll(queue.Delete(), quarantineQueue.Delete());
 
     public async Task DeleteMessage(MessageId msgId) => await queue.DeleteMessage(msgId);
     public async Task UpdateMessage(QueueMessage<T[]> message) => await queue.UpdateMessage(message);
+
+    public async Task QuarantineMessage(QueueMessage<T[]> message)
+    {
+        try
+        {
+            await quarantineQueue.Send(message.Item);
+            await queue.DeleteMessage(message.MessageId);
+
+            logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.DequeueCount);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to quarantine message {messageId}.", message.MessageId);
+        }
+    }
 }
