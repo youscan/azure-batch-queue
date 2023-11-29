@@ -1,4 +1,4 @@
-using AzureBatchQueue.Utils;
+using Azure.Storage.Queues.Models;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -7,166 +7,212 @@ namespace AzureBatchQueue.Tests;
 [TestFixture]
 public class BatchQueueTests
 {
-    record TestItem(string Name, int Age);
-    TimeSpan flushPeriod = TimeSpan.FromSeconds(2);
-
-    BatchQueue<TestItem> batchQueue;
-
-    [OneTimeSetUp]
-    public void OneTimeSetUp()
-    {
-        batchQueue = new BatchQueue<TestItem>("UseDevelopmentStorage=true", RandomQueueName(), flushPeriod: flushPeriod);
-    }
-
-    [SetUp]
-    public async Task SetUp() => await batchQueue.Init();
-
-    [TearDown]
-    public async Task TearDown() => await batchQueue.Delete();
-
     [Test]
-    public async Task SendBatch()
+    public async Task When_sending_batch()
     {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
+        using var queueTest = await Queue<string>(TimeSpan.FromMilliseconds(200));
 
-        (await batchQueue.ReceiveBatch()).Length.Should().Be(2);
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
     }
 
     [Test]
-    public async Task ReceiveBatch()
+    public async Task When_batch_timer_flushes_after_period()
     {
-        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
-        await batchQueue.SendBatch(Batch(items));
+        var flushPeriod = TimeSpan.FromMilliseconds(500);
+        using var queueTest = await Queue<string>(flushPeriod);
 
-        var batchItems = await batchQueue.ReceiveBatch();
-        batchItems.Length.Should().Be(items.Length);
-    }
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
 
-    [Test]
-    public async Task ReceiveMany()
-    {
-        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
-        const int amountOfBatchesToSend = 3;
-
-        for (var i = 0; i < amountOfBatchesToSend; i++)
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+        foreach (var item in response)
         {
-            await batchQueue.SendBatch(Batch(items));
+            // complete all except 'orange'
+            if (item.Item == "orange")
+                continue;
+
+            item.Complete();
         }
 
-        var batchItems = await batchQueue.ReceiveMany();
+        // wait for timer to flush
+        await Task.Delay(flushPeriod * 2);
 
-        batchItems.Length.Should().Be(amountOfBatchesToSend * items.Length);
+        var updatedResponse = await queueTest.BatchQueue.Receive();
+        updatedResponse.Single().Item.Should().Be("orange");
     }
 
     [Test]
-    public void ThrowsWhenAskingToReceiveTooManyMessagesAtOnce()
+    public async Task When_batch_flushes_after_all_complete()
     {
-        Assert.ThrowsAsync<ArgumentException>(async () => await batchQueue.ReceiveMany(100));
+        var longFlushPeriod = TimeSpan.FromMinutes(10);
+        using var queueTest = await Queue<string>(longFlushPeriod);
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var visibilityTimeout = TimeSpan.FromSeconds(1);
+        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        foreach (var item in response)
+            item.Complete();
+
+        // wait for message to become available for read if it's not completed
+        await Task.Delay(visibilityTimeout);
+
+        var updatedResponse = await queueTest.BatchQueue.Receive();
+        updatedResponse.Should().BeEmpty();
     }
 
     [Test]
-    public async Task Complete()
+    public async Task When_many_threads_complete_in_parallel()
     {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
+        var shortFlushPeriod = TimeSpan.FromSeconds(1);
+        using var queueTest = await Queue<string>(shortFlushPeriod);
 
-        var batchItems = await batchQueue.ReceiveBatch();
-        foreach (var batchItem in batchItems) await batchItem.Complete();
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
 
-        (await batchQueue.ReceiveBatch()).Length.Should().Be(0);
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        Assert.DoesNotThrow(() => Parallel.ForEach(response, batchItem => batchItem.Complete()));
     }
 
-    [Test]
-    public async Task CompleteAfterCompletion()
+    [TestCase(10)]
+    [TestCase(100)]
+    [TestCase(500)]
+    public async Task When_many_clients_complete_in_parallel(int parallelCount)
     {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
-        var batchItems = await batchQueue.ReceiveBatch();
+        var shortFlushPeriod = TimeSpan.FromSeconds(1);
+        using var queueTest = await Queue<string>(shortFlushPeriod);
 
-        // complete whole batch
-        foreach (var batchItem in batchItems)
-            await batchItem.Complete();
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
 
-        // wait while batch completes
-        await Task.Delay(TimeSpan.FromMilliseconds(20));
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
-        // complete already flushed message
-         Assert.ThrowsAsync<MessageBatchCompletedException>(async () => await batchItems.First().Complete());
-    }
+        var tasks = new Task[parallelCount];
 
-    [Test]
-    public async Task FlushOnTimeout()
-    {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
-
-        var batchItems = await batchQueue.ReceiveBatch();
-        batchItems.Length.Should().Be(2);
-        await batchItems.First().Complete();
-
-        await WaitTillFlush();
-
-        var remainingItems = await batchQueue.ReceiveBatch();
-        remainingItems.Length.Should().Be(1);
-    }
-
-    [Test]
-    public async Task LeaseBatchWhileProcessing()
-    {
-        await batchQueue.SendBatch(Batch(new TestItem("Dimka", 33), new TestItem("Yaroslav", 26)));
-
-        var batchItems = await batchQueue.ReceiveBatch();
-        var batchItems2 = await batchQueue.ReceiveBatch();
-
-        batchItems.Length.Should().Be(2);
-        batchItems2.Length.Should().Be(0);
-
-        // do not complete any messages, and wait for the batch to return to the queue
-        await WaitTillFlush();
-
-        var batchItems3 = await batchQueue.ReceiveBatch();
-        batchItems3.Length.Should().Be(2);
-    }
-
-    [Test]
-    public async Task HandleCompressedAndUncompressedMessages()
-    {
-        var items = new[] { new TestItem("Dimka", 33), new TestItem("Yaroslav", 26) };
-        await batchQueue.SendBatch(CompressedBatch(items));
-        await batchQueue.SendBatch(Batch(items));
-
-        var batchItems = await batchQueue.ReceiveBatch();
-        var batchItems2 = await batchQueue.ReceiveBatch();
-
-        batchItems.Length.Should().Be(2);
-        batchItems2.Length.Should().Be(2);
-
-        await batchItems.First().Complete();
-        await batchItems2.First().Complete();
-
-        await WaitTillFlush();
-
-        var batchItems1Updated = await batchQueue.ReceiveBatch();
-        var batchItems2Updated = await batchQueue.ReceiveBatch();
-        batchItems1Updated.Length.Should().Be(1);
-        batchItems2Updated.Length.Should().Be(1);
-    }
-
-    static MessageBatch<TestItem> CompressedBatch(params TestItem[] items) => Batch(new GZipCompressedSerializer<TestItem>(), items);
-    static MessageBatch<TestItem> Batch(params TestItem[] items) => Batch(new JsonSerializer<TestItem>(), items);
-
-    static MessageBatch<TestItem> Batch(IMessageBatchSerializer<TestItem>? serializer, TestItem[] items)
-    {
-        serializer ??= new JsonSerializer<TestItem>();
-        var batch = new MessageBatch<TestItem>(serializer);
-
-        foreach (var item in items)
+        for (var i = 0; i < parallelCount; i++)
         {
-            if (!batch.TryAdd(item))
-                return batch;
+            tasks[i] = Task.Run(() =>
+            {
+                foreach (var item in response)
+                    item.Complete();
+            });
         }
 
-        return batch;
+        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
     }
 
-    async Task WaitTillFlush() => await Task.Delay(flushPeriod.Add(TimeSpan.FromMilliseconds(100)));
+    [Test]
+    public async Task When_quarantine_whole_batch()
+    {
+        const int maxDequeueCount = 1;
+        var flushPeriod = TimeSpan.FromMilliseconds(20);
+        using var queueTest = await Queue<string>(flushPeriod, maxDequeueCount);
 
-    static string RandomQueueName() => $"queue-name-{new Random(1000).Next()}";
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        // do not complete any items from the batch
+
+        // wait for message to be quarantined
+        await Task.Delay(flushPeriod * 3);
+
+        var responseFromQuarantine = await queueTest.BatchQueue.ReceiveFromQuarantine();
+        responseFromQuarantine.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+    }
+
+    [Test]
+    public async Task When_quarantine_only_not_completed_items_from_batch()
+    {
+        const int maxDequeueCount = 1;
+        var flushPeriod = TimeSpan.FromMilliseconds(200);
+        using var queueTest = await Queue<string>(flushPeriod, maxDequeueCount);
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        const string failedItem = "orange";
+        foreach (var item in response)
+        {
+            if (item.Item == failedItem)
+                continue;
+
+            item.Complete();
+        }
+
+        // wait for message to be quarantined
+        await Task.Delay(flushPeriod * 3);
+
+        var responseFromQuarantine = await queueTest.BatchQueue.ReceiveFromQuarantine();
+        responseFromQuarantine.Select(x => x.Item).Should().BeEquivalentTo(failedItem);
+    }
+
+    [Test]
+    public async Task When_completing_same_item_twice()
+    {
+        using var queueTest = await Queue<string>(TimeSpan.FromMilliseconds(200));
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+
+        var completeFirst = response.Single().Complete();
+        var completeSecond = response.Single().Complete();
+
+        completeFirst.Should().BeTrue();
+        completeSecond.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task When_completing_item_after_batch_was_flushed()
+    {
+        var flushPeriod = TimeSpan.FromMilliseconds(200);
+        using var queueTest = await Queue<string>(flushPeriod);
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+
+        // wait for batch to be flushed
+        await Task.Delay(flushPeriod * 2);
+
+        Assert.Throws<BatchCompletedException>(() => response.Single().Complete());
+    }
+
+    static async Task<BatchQueueTest<T>> Queue<T>(TimeSpan flushPeriod, int maxDequeueCount = 5)
+    {
+        var queue = new BatchQueueTest<T>();
+        await queue.Init(flushPeriod, maxDequeueCount);
+        return queue;
+    }
+
+    class BatchQueueTest<T> : IDisposable
+    {
+        public async Task Init(TimeSpan flushPeriod, int maxDequeueCount)
+        {
+            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", "batch-test", flushPeriod, maxDequeueCount);
+            await BatchQueue.Init();
+        }
+
+        public BatchQueue<T> BatchQueue { get; private set; }
+        public void Dispose() => BatchQueue.Delete().GetAwaiter().GetResult();
+    }
 }
