@@ -13,10 +13,16 @@ public class BatchQueue<T>
     readonly MessageQueue<T[]> quarantineQueue;
     readonly int maxDequeueCount;
 
-    public BatchQueue(string connectionString, string queueName, TimeSpan flushPeriod, int maxDequeueCount = 5, ILogger<BatchQueue<T>>? logger = null)
+    public BatchQueue(
+        string connectionString,
+        string queueName,
+        TimeSpan flushPeriod,
+        int maxDequeueCount = 5,
+        IMessageQueueSerializer<T[]>? serializer = null,
+        ILogger<BatchQueue<T>>? logger = null)
     {
-        queue = new MessageQueue<T[]>(connectionString, queueName);
-        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine");
+        queue = new MessageQueue<T[]>(connectionString, queueName, serializer);
+        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine", serializer);
         this.maxDequeueCount = maxDequeueCount;
 
         this.flushPeriod = flushPeriod;
