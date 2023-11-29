@@ -5,10 +5,11 @@ namespace AzureBatchQueue.Utils;
 
 public static class StringCompression
 {
-    public static byte[] Compress(string json)
-    {
-        var dataBytes = Encoding.UTF8.GetBytes(json);
+    public static byte[] Compress(byte[] bytes) => CompressInternal(bytes);
+    public static byte[] Compress(string json) => CompressInternal(Encoding.UTF8.GetBytes(json));
 
+    static byte[] CompressInternal(byte[] dataBytes)
+    {
         using var memoryStream = new MemoryStream();
         using (var gzipStream = new GZipStream(memoryStream, CompressionMode.Compress, true))
         {
@@ -18,21 +19,16 @@ public static class StringCompression
         return memoryStream.ToArray();
     }
 
-    public static string Decompress(byte[] bytes)
+    public static byte[] Decompress(byte[] bytes)
     {
-        byte[] decompressedBytes;
         var compressedStream = new MemoryStream(bytes);
 
-        using (var decompressorStream = new GZipStream(compressedStream, CompressionMode.Decompress))
-        {
-            using (var decompressedStream = new MemoryStream())
-            {
-                decompressorStream.CopyTo(decompressedStream);
+        using var decompressorStream = new GZipStream(compressedStream, CompressionMode.Decompress);
+        using var decompressedStream = new MemoryStream();
+        decompressorStream.CopyTo(decompressedStream);
 
-                decompressedBytes = decompressedStream.ToArray();
-            }
-        }
+        var decompressedBytes = decompressedStream.ToArray();
 
-        return Encoding.UTF8.GetString(decompressedBytes);
+        return decompressedBytes;
     }
 }
