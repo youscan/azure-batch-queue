@@ -28,24 +28,29 @@ public class Receiver
         {
             var batchItems = await batchQueue.Receive();
 
-            Log($"Received batch with {batchItems.Length} items.");
-
-            foreach (var batchItem in batchItems)
-            {
-                if (DoNotComplete.Contains(batchItem.Item))
-                {
-                    Log($"Will not complete {batchItem.Item}");
-                    continue;
-                }
-
-                Log($"Completed {batchItem.Item}");
-                batchItem.Complete();
-            }
+            if (batchItems.Length > 0)
+                ProcessBatch(batchItems);
 
             Sleep(TimeSpan.FromSeconds(2));
         }
 
         Log("Finish receiving items.");
+    }
+
+    void ProcessBatch(BatchItem<string>[] batchItems)
+    {
+        Log($"Received batch with {batchItems.Length} items.");
+        foreach (var batchItem in batchItems)
+        {
+            if (DoNotComplete.Contains(batchItem.Item))
+            {
+                Log($"Will not complete {batchItem.Item}");
+                continue;
+            }
+
+            Log($"Completed {batchItem.Item}");
+            batchItem.Complete();
+        }
     }
 
     static void Sleep(TimeSpan sleep)
