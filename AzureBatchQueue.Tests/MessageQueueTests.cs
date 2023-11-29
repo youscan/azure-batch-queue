@@ -1,7 +1,7 @@
-using Azure.Storage.Blobs;
+using System.Text.Json;
+using AzureBatchQueue.Utils;
 using FluentAssertions;
 using NUnit.Framework;
-using NUnit.Framework.Internal;
 
 namespace AzureBatchQueue.Tests;
 
@@ -49,17 +49,35 @@ public class MessageQueueTests
         message.MessageId.BlobName.Should().NotBeEmpty();
     }
 
-    static async Task<QueueTest<T>> Queue<T>()
+    [Test]
+    public async Task When_using_custom_serializer()
     {
-        var queue = new QueueTest<T>();
+        using var queueTest = await Queue(GZipCompressedSerializer<TestItem>.New());
+
+        var msg = new TestItem("Dimka", 33);
+        await queueTest.Queue.Send(msg);
+
+        var message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(msg);
+        message.MessageId.BlobName.Should().BeNull();
+    }
+
+    static async Task<QueueTest<T>> Queue<T>(IMessageQueueSerializer<T>? serializer = null)
+    {
+        var queue = new QueueTest<T>(serializer);
         await queue.Init();
         return queue;
     }
 
     class QueueTest<T> : IDisposable
     {
+        public QueueTest(IMessageQueueSerializer<T>? serializer = null)
+        {
+            Queue = new MessageQueue<T>("UseDevelopmentStorage=true", "test", serializer);
+        }
+
         public async Task Init() => await Queue.Init();
-        public MessageQueue<T> Queue { get; } = new("UseDevelopmentStorage=true", "test");
+        public MessageQueue<T> Queue { get; }
         public void Dispose()
         {
             Queue.Delete().GetAwaiter().GetResult();

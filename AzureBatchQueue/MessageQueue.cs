@@ -8,20 +8,18 @@ namespace AzureBatchQueue;
 
 public class MessageQueue<T>
 {
-    readonly Func<ReadOnlyMemory<byte>, T> deserialize;
+    readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
 
-    readonly Func<T, byte[]> serialize;
     readonly QueueClient queue;
     readonly BlobContainerClient container;
 
-    public MessageQueue(string connectionString, string queueName, Func<T, byte[]>? serialize = null, Func<ReadOnlyMemory<byte>, T>? deserialize = null)
+    public MessageQueue(string connectionString, string queueName, IMessageQueueSerializer<T>? serializer = null)
     {
         queue = new QueueClient(connectionString, queueName, new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         container = new BlobContainerClient(connectionString, $"overflow-{queueName}");
 
-        this.serialize = serialize ?? (v => JsonSerializer.SerializeToUtf8Bytes(v));
-        this.deserialize = deserialize ?? (v => JsonSerializer.Deserialize<T>(v.Span)!);
+        this.serializer = serializer ?? new JsonSerializer<T>();
     }
 
     public string Name => queue.Name;
@@ -35,7 +33,7 @@ public class MessageQueue<T>
 
     async Task<byte[]> Payload(T item, CancellationToken ct)
     {
-        var payload = serialize(item);
+        var payload = serializer.Serialize(item);
         if (payload.Length > MaxMessageSize)
         {
             var blobRef = BlobRef.Create();
@@ -55,7 +53,7 @@ public class MessageQueue<T>
 
     public async Task UpdateMessage(QueueMessage<T> message)
     {
-        var payload = serialize(message.Item);
+        var payload = serializer.Serialize(message.Item);
 
         await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), TimeSpan.FromSeconds(0));
     }
@@ -76,7 +74,7 @@ public class MessageQueue<T>
             payload = blobData.Value.Content.ToMemory();
         }
 
-        var item = deserialize(payload);
+        var item = serializer.Deserialize(payload);
         var msg = new QueueMessage<T>(item, new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName), m.DequeueCount);
         return msg;
     }
