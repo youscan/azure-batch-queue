@@ -91,12 +91,29 @@ public class MessageQueue<T>
         return await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct)));
     }
 
-    async Task QuarantineMessage(QueueMessage msg, CancellationToken ct = default)
+    async Task QuarantineMessage(QueueMessage queueMessage, CancellationToken ct = default)
     {
         try
         {
-            await quarantineQueue.SendMessageAsync(msg.Body, cancellationToken: ct);
-            await queue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
+            await quarantineQueue.SendMessageAsync(queueMessage.Body, cancellationToken: ct);
+            await queue.DeleteMessageAsync(queueMessage.MessageId, queueMessage.PopReceipt, ct);
+        }
+        catch (Exception e)
+        {
+            // log Error
+        }
+    }
+
+    public async Task QuarantineMessage(QueueMessage<T> msg, CancellationToken ct = default)
+    {
+        try
+        {
+            var payload = msg.MessageId.BlobName != null
+                ? JsonSerializer.SerializeToUtf8Bytes(new BlobRef(msg.MessageId.BlobName))
+                : serializer.Serialize(msg.Item);
+
+            await quarantineQueue.SendMessageAsync(new BinaryData(payload), cancellationToken: ct);
+            await queue.DeleteMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, ct);
         }
         catch (Exception e)
         {

@@ -8,7 +8,6 @@ public class BatchQueue<T>
     readonly ILogger<BatchQueue<T>> logger;
 
     readonly MessageQueue<T[]> queue;
-    readonly MessageQueue<T[]> quarantineQueue;
     readonly int maxDequeueCount;
 
     readonly TimeSpan defaultReceiveVisibilityTimeout = TimeSpan.FromSeconds(30);
@@ -21,7 +20,6 @@ public class BatchQueue<T>
         ILogger<BatchQueue<T>>? logger = null)
     {
         queue = new MessageQueue<T[]>(connectionString, queueName, serializer: serializer);
-        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine", serializer: serializer);
         this.maxDequeueCount = maxDequeueCount;
 
         this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
@@ -32,16 +30,24 @@ public class BatchQueue<T>
     public async Task Send(T[] items) => await queue.Send(items);
 
     public async Task<BatchItem<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
-        CancellationToken ct = default) => await ReceiveInternal(queue, maxMessages, ValidVisibilityTimeout(visibilityTimeout), ct);
+        CancellationToken ct = default)
+    {
+        var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);
+        return await ReceiveInternal(queue.Receive(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
+    }
 
     public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
-        CancellationToken ct = default) => await ReceiveInternal(quarantineQueue, maxMessages, ValidVisibilityTimeout(visibilityTimeout), ct);
+        CancellationToken ct = default)
+    {
+        var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);
+        return await ReceiveInternal(queue.ReceiveFromQuarantine(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
+    }
 
-    async Task<BatchItem<T>[]> ReceiveInternal(MessageQueue<T[]> msgQueue, int? maxMessages, TimeSpan visibilityTimeout, CancellationToken ct)
+    async Task<BatchItem<T>[]> ReceiveInternal(Task<QueueMessage<T[]>[]> receive, TimeSpan visibilityTimeout)
     {
         var flushPeriod = CalculateFlushPeriod(visibilityTimeout);
 
-        var arrayOfBatches = await msgQueue.Receive(maxMessages, visibilityTimeout, ct: ct);
+        var arrayOfBatches = await receive;
         var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, flushPeriod, maxDequeueCount, logger)).ToList();
 
         return timerBatches.SelectMany(x => x.Unpack()).ToArray();
@@ -73,8 +79,8 @@ public class BatchQueue<T>
         throw new ArgumentOutOfRangeException("VisibilityTimeout");
     }
 
-    public async Task Init() => await Task.WhenAll(queue.Init(), quarantineQueue.Init());
-    public async Task Delete() => await Task.WhenAll(queue.Delete(), quarantineQueue.Delete());
+    public async Task Init() => await queue.Init();
+    public async Task Delete() => await queue.Delete();
 
     public async Task DeleteMessage(MessageId msgId) => await queue.DeleteMessage(msgId);
     public async Task UpdateMessage(QueueMessage<T[]> message) => await queue.UpdateMessage(message);
@@ -83,8 +89,7 @@ public class BatchQueue<T>
     {
         try
         {
-            await quarantineQueue.Send(message.Item);
-            await queue.DeleteMessage(message.MessageId);
+            await queue.QuarantineMessage(message);
 
             logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.DequeueCount);
         }
