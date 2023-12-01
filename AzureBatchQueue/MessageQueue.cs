@@ -24,11 +24,11 @@ public class MessageQueue<T>
 
     public string Name => queue.Name;
 
-    public async Task Send(T item, CancellationToken ct = default)
+    public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
         var payload = await Payload(item, ct);
 
-        await queue.SendMessageAsync(new BinaryData(payload), null, null, ct);
+        await queue.SendMessageAsync(new BinaryData(payload), visibilityTimeout, null, ct);
     }
 
     async Task<byte[]> Payload(T item, CancellationToken ct)

@@ -10,7 +10,7 @@ public class Sender
 
     public Sender(string queueName, ILogger<BatchQueue<string>> logger)
     {
-        batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, flushPeriod: TimeSpan.FromSeconds(5), logger: logger);
+        batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, logger: logger);
     }
 
     public async Task Init()
