@@ -151,7 +151,8 @@ public class MessageQueue<T>
 
     record BlobRef([property: JsonPropertyName("__MSQ_QUEUE_BLOBNAME__")] string BlobName)
     {
-        public static BlobRef Create() => new(Guid.NewGuid().ToString("N"));
+        public static BlobRef Create() => new(FileName());
+        static string FileName() => $"{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:s}{Guid.NewGuid():N}.json.gzip";
     }
 
     public async Task Init() => await Task.WhenAll(queue.CreateIfNotExistsAsync(), quarantineQueue.CreateIfNotExistsAsync(), container.CreateIfNotExistsAsync());
