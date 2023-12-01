@@ -8,15 +8,19 @@ namespace AzureBatchQueue;
 
 public class MessageQueue<T>
 {
+    readonly int maxDequeueCount;
     readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
 
     readonly QueueClient queue;
+    readonly QueueClient quarantineQueue;
     readonly BlobContainerClient container;
 
-    public MessageQueue(string connectionString, string queueName, IMessageQueueSerializer<T>? serializer = null)
+    public MessageQueue(string connectionString, string queueName, int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
     {
+        this.maxDequeueCount = maxDequeueCount;
         queue = new QueueClient(connectionString, queueName, new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+        quarantineQueue = new QueueClient(connectionString, $"{queueName}-quarantine", new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         container = new BlobContainerClient(connectionString, $"overflow-{queueName}");
 
         this.serializer = serializer ?? new JsonSerializer<T>();
@@ -62,7 +66,42 @@ public class MessageQueue<T>
         CancellationToken ct = default)
     {
         var r = await queue.ReceiveMessagesAsync(maxMessages, visibilityTimeout, cancellationToken: ct);
+
+        if (!r.HasValue)
+            return Array.Empty<QueueMessage<T>>();
+
+        var quarantineMessages = r.Value.Where(x => x.DequeueCount > maxDequeueCount).ToList();
+        var validMessages = r.Value.Except(quarantineMessages);
+
+        var quarantine = Task.WhenAll(quarantineMessages.Select(x => QuarantineMessage(x, ct)));
+        var response = Task.WhenAll(validMessages.Select(x => ToQueueMessage(x, ct)));
+
+        await Task.WhenAll(quarantine, response);
+        return response.Result;
+    }
+
+    public async Task<QueueMessage<T>[]> ReceiveFromQuarantine(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+        CancellationToken ct = default)
+    {
+        var r = await quarantineQueue.ReceiveMessagesAsync(maxMessages, visibilityTimeout, cancellationToken: ct);
+
+        if (!r.HasValue)
+            return Array.Empty<QueueMessage<T>>();
+
         return await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct)));
+    }
+
+    async Task QuarantineMessage(QueueMessage msg, CancellationToken ct = default)
+    {
+        try
+        {
+            await quarantineQueue.SendMessageAsync(msg.Body, cancellationToken: ct);
+            await queue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
+        }
+        catch (Exception e)
+        {
+            // log Error
+        }
     }
 
     async Task<QueueMessage<T>> ToQueueMessage(QueueMessage m, CancellationToken ct)
@@ -98,12 +137,16 @@ public class MessageQueue<T>
         public static BlobRef Create() => new(Guid.NewGuid().ToString("N"));
     }
 
-    public async Task Init() => await Task.WhenAll(queue.CreateIfNotExistsAsync(), container.CreateIfNotExistsAsync());
+    public async Task Init() => await Task.WhenAll(queue.CreateIfNotExistsAsync(), quarantineQueue.CreateIfNotExistsAsync(), container.CreateIfNotExistsAsync());
 
-    public async Task Delete()
+    public async Task Delete(bool deleteBlobs = false)
     {
-        await queue.DeleteAsync();
-        await container.DeleteIfExistsAsync();
+        var tasks = new List<Task> { queue.DeleteAsync(), quarantineQueue.DeleteAsync() };
+
+        if (deleteBlobs)
+            tasks.Add(container.DeleteAsync());
+
+        await Task.WhenAll(tasks);
     }
 }
 

@@ -20,8 +20,8 @@ public class BatchQueue<T>
         IMessageQueueSerializer<T[]>? serializer = null,
         ILogger<BatchQueue<T>>? logger = null)
     {
-        queue = new MessageQueue<T[]>(connectionString, queueName, serializer);
-        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine", serializer);
+        queue = new MessageQueue<T[]>(connectionString, queueName, serializer: serializer);
+        quarantineQueue = new MessageQueue<T[]>(connectionString, $"{queueName}-quarantine", serializer: serializer);
         this.maxDequeueCount = maxDequeueCount;
 
         this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;

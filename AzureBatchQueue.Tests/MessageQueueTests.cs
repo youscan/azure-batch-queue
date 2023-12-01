@@ -71,7 +71,7 @@ public class MessageQueueTests
     [Test]
     public async Task When_using_custom_serializer()
     {
-        using var queueTest = await Queue(GZipCompressedSerializer<TestItem>.New());
+        using var queueTest = await Queue(serializer: GZipCompressedSerializer<TestItem>.New());
 
         var msg = new TestItem("Dimka", 33);
         await queueTest.Queue.Send(msg);
@@ -81,18 +81,48 @@ public class MessageQueueTests
         message.MessageId.BlobName.Should().BeNull();
     }
 
-    static async Task<QueueTest<T>> Queue<T>(IMessageQueueSerializer<T>? serializer = null)
+    [Test]
+    public async Task When_quarantine_small_message()
     {
-        var queue = new QueueTest<T>(serializer);
+        using var queueTest = await Queue<TestItem>(maxDequeueCount: 0); // quarantine after first read
+
+        var msg = new TestItem("Yaro", 26);
+        await queueTest.Queue.Send(msg);
+
+        (await queueTest.Queue.Receive()).Length.Should().Be(0);
+
+        var msgFromQuarantine = (await queueTest.Queue.ReceiveFromQuarantine()).Single();
+        msgFromQuarantine.Item.Should().Be(msg);
+        msgFromQuarantine.MessageId.BlobName.Should().BeNull();
+    }
+
+    [Test]
+    public async Task When_quarantine_large_message()
+    {
+        using var queueTest = await Queue<string>(maxDequeueCount: 0); // quarantine after first read
+
+        var largeMessage = new string('*', 65 * 1024);
+        await queueTest.Queue.Send(largeMessage);
+
+        (await queueTest.Queue.Receive()).Length.Should().Be(0);
+
+        var msgFromQuarantine = (await queueTest.Queue.ReceiveFromQuarantine()).Single();
+        msgFromQuarantine.Item.Should().Be(largeMessage);
+        msgFromQuarantine.MessageId.BlobName.Should().NotBeEmpty();
+    }
+
+    static async Task<QueueTest<T>> Queue<T>(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
+    {
+        var queue = new QueueTest<T>(maxDequeueCount, serializer);
         await queue.Init();
         return queue;
     }
 
     class QueueTest<T> : IDisposable
     {
-        public QueueTest(IMessageQueueSerializer<T>? serializer = null)
+        public QueueTest(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
         {
-            Queue = new MessageQueue<T>("UseDevelopmentStorage=true", "test", serializer);
+            Queue = new MessageQueue<T>("UseDevelopmentStorage=true", "test", maxDequeueCount: maxDequeueCount, serializer: serializer);
         }
 
         public async Task Init() => await Queue.Init();
