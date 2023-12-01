@@ -51,11 +51,11 @@ public class MessageQueue<T>
             await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
     }
 
-    public async Task UpdateMessage(QueueMessage<T> message)
+    public async Task UpdateMessage(QueueMessage<T> message, TimeSpan? visibilityTimeout = null)
     {
         var payload = serializer.Serialize(message.Item);
 
-        await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), TimeSpan.FromSeconds(0));
+        await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), visibilityTimeout ?? TimeSpan.Zero);
     }
 
     public async Task<QueueMessage<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
@@ -107,5 +107,5 @@ public class MessageQueue<T>
     }
 }
 
-public record QueueMessage<T>(T Item, MessageId MessageId, long DequeueCount);
+public record QueueMessage<T>(T Item, MessageId MessageId, long DequeueCount = 0);
 public record MessageId(string Id, string PopReceipt, string? BlobName);

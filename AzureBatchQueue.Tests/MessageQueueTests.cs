@@ -35,6 +35,25 @@ public class MessageQueueTests
         message.MessageId.BlobName.Should().BeNull();
     }
 
+    [Test]
+    public async Task When_updating_message()
+    {
+        using var queueTest = await Queue<TestItem>();
+
+        var item = new TestItem("Dimka", 33);
+        await queueTest.Queue.Send(item);
+
+        var message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(item);
+
+        var updatedItem = new TestItem("Yaroslav", 26);
+        var updated = new QueueMessage<TestItem>(updatedItem, message.MessageId);
+        await queueTest.Queue.UpdateMessage(updated);
+
+        message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(updatedItem);
+    }
+
     record SimilarToInternalBlobReference(string BlobName, string Body);
     [Test]
     public async Task When_sending_message_similar_to_internal_blob_reference()
