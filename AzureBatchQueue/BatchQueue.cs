@@ -29,14 +29,14 @@ public class BatchQueue<T>
 
     public async Task Send(T[] items) => await queue.Send(items);
 
-    public async Task<BatchItem<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+    public async Task<BatchItem<T>[]> Receive(int maxMessages = 32, TimeSpan? visibilityTimeout = null,
         CancellationToken ct = default)
     {
         var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);
         return await ReceiveInternal(queue.Receive(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
     }
 
-    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int maxMessages = 32, TimeSpan? visibilityTimeout = null,
         CancellationToken ct = default)
     {
         var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);

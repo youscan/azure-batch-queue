@@ -11,6 +11,7 @@ public class MessageQueue<T>
     readonly int maxDequeueCount;
     readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
+    const int MaxMessagesReceive = 32;
 
     readonly QueueClient queue;
     readonly QueueClient quarantineQueue;
@@ -62,7 +63,7 @@ public class MessageQueue<T>
         await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), visibilityTimeout ?? TimeSpan.Zero);
     }
 
-    public async Task<QueueMessage<T>[]> Receive(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+    public async Task<QueueMessage<T>[]> Receive(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
         CancellationToken ct = default)
     {
         var r = await queue.ReceiveMessagesAsync(maxMessages, visibilityTimeout, cancellationToken: ct);
@@ -80,7 +81,7 @@ public class MessageQueue<T>
         return response.Result;
     }
 
-    public async Task<QueueMessage<T>[]> ReceiveFromQuarantine(int? maxMessages = null, TimeSpan? visibilityTimeout = null,
+    public async Task<QueueMessage<T>[]> ReceiveFromQuarantine(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
         CancellationToken ct = default)
     {
         var r = await quarantineQueue.ReceiveMessagesAsync(maxMessages, visibilityTimeout, cancellationToken: ct);
