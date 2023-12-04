@@ -26,7 +26,7 @@ public class Receiver
 
         while (!canceled)
         {
-            var batchItems = await batchQueue.Receive();
+            var batchItems = await batchQueue.Receive(visibilityTimeout: TimeSpan.FromSeconds(1));
 
             if (batchItems.Length > 0)
                 ProcessBatch(batchItems);
