@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace AzureBatchQueue;
@@ -9,6 +11,7 @@ namespace AzureBatchQueue;
 public class MessageQueue<T>
 {
     readonly int maxDequeueCount;
+    readonly ILogger logger;
     readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
     const int MaxMessagesReceive = 32;
@@ -17,7 +20,10 @@ public class MessageQueue<T>
     readonly QueueClient quarantineQueue;
     readonly BlobContainerClient container;
 
-    public MessageQueue(string connectionString, string queueName, int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
+    public MessageQueue(string connectionString, string queueName,
+        int maxDequeueCount = 5,
+        IMessageQueueSerializer<T>? serializer = null,
+        ILogger? logger = null)
     {
         this.maxDequeueCount = maxDequeueCount;
         queue = new QueueClient(connectionString, queueName, new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
@@ -25,6 +31,7 @@ public class MessageQueue<T>
         container = new BlobContainerClient(connectionString, $"overflow-{queueName}");
 
         this.serializer = serializer ?? new JsonSerializer<T>();
+        this.logger = logger ?? NullLogger.Instance;
     }
 
     public string Name => queue.Name;
@@ -98,10 +105,14 @@ public class MessageQueue<T>
         {
             await quarantineQueue.SendMessageAsync(queueMessage.Body, cancellationToken: ct);
             await queue.DeleteMessageAsync(queueMessage.MessageId, queueMessage.PopReceipt, ct);
+
+            logger.LogInformation("QueueMessage {msgId} with {popReceipt} was quarantined after {dequeueCount} unsuccessful attempts.",
+                queueMessage.MessageId, queueMessage.PopReceipt, queueMessage.DequeueCount);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            // log Error
+            logger.LogError(ex, "Failed to quarantine queue message with {messageId} and {popReceipt}.",
+                queueMessage.MessageId, queueMessage.PopReceipt);
         }
     }
 

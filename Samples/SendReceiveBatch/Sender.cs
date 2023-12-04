@@ -8,7 +8,7 @@ public class Sender
 {
     BatchQueue<string> batchQueue;
 
-    public Sender(string queueName, ILogger<BatchQueue<string>> logger)
+    public Sender(string queueName, ILogger logger)
     {
         batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueName, logger: logger);
     }

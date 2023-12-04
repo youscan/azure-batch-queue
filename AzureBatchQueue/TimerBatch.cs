@@ -9,14 +9,14 @@ public class TimerBatch<T>
     readonly QueueMessage<T[]> msg;
     readonly TimeSpan flushPeriod;
     readonly int maxDequeueCount;
-    readonly ILogger<BatchQueue<T>> logger;
+    readonly ILogger logger;
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
     readonly Timer timer;
     bool completed;
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, TimeSpan flushPeriod, int maxDequeueCount,
-        ILogger<BatchQueue<T>> logger)
+        ILogger logger)
     {
         this.batchQueue = batchQueue;
         this.msg = msg;

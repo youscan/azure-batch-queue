@@ -5,7 +5,7 @@ namespace AzureBatchQueue;
 
 public class BatchQueue<T>
 {
-    readonly ILogger<BatchQueue<T>> logger;
+    readonly ILogger logger;
 
     readonly MessageQueue<T[]> queue;
     readonly int maxDequeueCount;
@@ -17,12 +17,12 @@ public class BatchQueue<T>
         string queueName,
         int maxDequeueCount = 5,
         IMessageQueueSerializer<T[]>? serializer = null,
-        ILogger<BatchQueue<T>>? logger = null)
+        ILogger? logger = null)
     {
-        queue = new MessageQueue<T[]>(connectionString, queueName, serializer: serializer);
+        queue = new MessageQueue<T[]>(connectionString, queueName, serializer: serializer, logger: logger);
         this.maxDequeueCount = maxDequeueCount;
 
-        this.logger = logger ?? NullLogger<BatchQueue<T>>.Instance;
+        this.logger = logger ?? NullLogger.Instance;
     }
 
     public string Name => queue.Name;
