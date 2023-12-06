@@ -29,6 +29,8 @@ public class TimerBatch<T>
         completed = false;
     }
 
+    public string MessageId => msg.MessageId.Id;
+
     async Task Flush()
     {
         try

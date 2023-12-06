@@ -10,6 +10,7 @@ public class BatchItem<T>
     }
 
     public string Id { get; }
+    public string BatchId => Batch.MessageId;
     public T Item { get; }
     TimerBatch<T> Batch { get; }
 
