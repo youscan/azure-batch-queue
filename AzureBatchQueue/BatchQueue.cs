@@ -82,8 +82,8 @@ public class BatchQueue<T>
     public async Task Init() => await queue.Init();
     public async Task Delete() => await queue.Delete();
 
-    public async Task DeleteMessage(MessageId msgId) => await queue.DeleteMessage(msgId);
-    public async Task UpdateMessage(QueueMessage<T[]> message) => await queue.UpdateMessage(message);
+    public async Task DeleteMessage(MessageId msgId, CancellationToken ct = default) => await queue.DeleteMessage(msgId, ct);
+    public async Task UpdateMessage(QueueMessage<T[]> message, CancellationToken ct = default) => await queue.UpdateMessage(message, ct: ct);
 
     public async Task QuarantineMessage(QueueMessage<T[]> message)
     {
