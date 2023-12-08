@@ -139,9 +139,9 @@ public class MessageQueue<T>
             if (msg.MessageId.BlobName != null && !payload.UsingBlob)
                 await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            // log Error
+            logger.LogError(ex, "Failed to quarantine queue message with {messageId} and {popReceipt}.", msg.MessageId.Id, msg.MessageId.PopReceipt);
         }
     }
 
