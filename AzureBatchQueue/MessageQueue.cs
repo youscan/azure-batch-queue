@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,7 @@ public class MessageQueue<T>
     readonly QueueClient queue;
     readonly QueueClient quarantineQueue;
     readonly BlobContainerClient container;
+    readonly BlockBlobClient blobClient;
 
     public MessageQueue(string connectionString, string queueName,
         int maxDequeueCount = 5,
@@ -38,22 +40,29 @@ public class MessageQueue<T>
 
     public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var payload = await Payload(item, ct);
+        var payload = await Payload(item, ct: ct);
 
-        await queue.SendMessageAsync(new BinaryData(payload), visibilityTimeout, null, ct);
+        await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout, null, ct);
     }
 
-    async Task<byte[]> Payload(T item, CancellationToken ct)
+    async Task<Payload> Payload(T item, string? blobName = null, CancellationToken ct = default)
     {
         var payload = serializer.Serialize(item);
-        if (payload.Length > MaxMessageSize)
+
+        if (payload.Length <= MaxMessageSize)
+            return new Payload(payload, false);
+
+        if (blobName == null)
         {
             var blobRef = BlobRef.Create();
             await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(payload), ct);
             payload = JsonSerializer.SerializeToUtf8Bytes(blobRef);
+            return new Payload(payload, true);
         }
 
-        return payload;
+        await container.GetBlobClient(blobName).UploadAsync(new BinaryData(payload), true, ct);
+        payload = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
+        return new Payload(payload, true);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
@@ -63,11 +72,13 @@ public class MessageQueue<T>
             await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
     }
 
-    public async Task UpdateMessage(QueueMessage<T> message, TimeSpan? visibilityTimeout = null)
+    public async Task UpdateMessage(QueueMessage<T> msg, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var payload = serializer.Serialize(message.Item);
+        var payload = await Payload(msg.Item, msg.MessageId.BlobName, ct);
 
-        await queue.UpdateMessageAsync(message.MessageId.Id, message.MessageId.PopReceipt, new BinaryData(payload), visibilityTimeout ?? TimeSpan.Zero);
+        await queue.UpdateMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, ct);
+        if (msg.MessageId.BlobName != null && !payload.UsingBlob)
+            await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
     }
 
     public async Task<QueueMessage<T>[]> Receive(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
@@ -120,12 +131,13 @@ public class MessageQueue<T>
     {
         try
         {
-            var payload = msg.MessageId.BlobName != null
-                ? JsonSerializer.SerializeToUtf8Bytes(new BlobRef(msg.MessageId.BlobName))
-                : serializer.Serialize(msg.Item);
+            var payload = await Payload(msg.Item, msg.MessageId.BlobName, ct);
 
-            await quarantineQueue.SendMessageAsync(new BinaryData(payload), cancellationToken: ct);
+            await quarantineQueue.SendMessageAsync(new BinaryData(payload.Data), cancellationToken: ct);
             await queue.DeleteMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, ct);
+
+            if (msg.MessageId.BlobName != null && !payload.UsingBlob)
+                await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
         }
         catch (Exception e)
         {
@@ -163,6 +175,7 @@ public class MessageQueue<T>
 
     record BlobRef([property: JsonPropertyName("__MSQ_QUEUE_BLOBNAME__")] string BlobName)
     {
+        public static BlobRef Get(string blobName) => new(blobName);
         public static BlobRef Create() => new(FileName());
         static string FileName() => $"{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:s}{Guid.NewGuid():N}.json.gzip";
     }
@@ -182,3 +195,4 @@ public class MessageQueue<T>
 
 public record QueueMessage<T>(T Item, MessageId MessageId, long DequeueCount = 0);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
+public record Payload(byte[] Data, bool UsingBlob);

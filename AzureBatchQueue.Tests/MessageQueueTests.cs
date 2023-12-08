@@ -54,6 +54,50 @@ public class MessageQueueTests
         message.Item.Should().Be(updatedItem);
     }
 
+    [Test]
+    public async Task When_updating_large_message_with_large_message()
+    {
+        using var queueTest = await Queue<string>();
+
+        var largeItem = new string('*', 65 * 1024);
+        await queueTest.Queue.Send(largeItem);
+
+        var message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(largeItem);
+        var blobName = message.MessageId.BlobName;
+        blobName.Should().NotBeEmpty();
+
+        var updatedItem = new string('-', 65 * 1024);
+        var updated = new QueueMessage<string>(updatedItem, message.MessageId);
+        await queueTest.Queue.UpdateMessage(updated);
+
+        message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(updatedItem);
+        message.MessageId.BlobName.Should().Be(blobName);
+    }
+
+    [Test]
+    public async Task When_updating_large_message_with_small_message()
+    {
+        using var queueTest = await Queue<string>();
+
+        var largeItem = new string('*', 65 * 1024);
+        await queueTest.Queue.Send(largeItem);
+
+        var message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(largeItem);
+        var blobName = message.MessageId.BlobName;
+        blobName.Should().NotBeEmpty();
+
+        var updatedItem = new string('+', 1 * 1024);
+        var updated = new QueueMessage<string>(updatedItem, message.MessageId);
+        await queueTest.Queue.UpdateMessage(updated);
+
+        message = (await queueTest.Queue.Receive()).Single();
+        message.Item.Should().Be(updatedItem);
+        message.MessageId.BlobName.Should().BeNull();
+    }
+
     record SimilarToInternalBlobReference(string BlobName, string Body);
     [Test]
     public async Task When_sending_message_similar_to_internal_blob_reference()
