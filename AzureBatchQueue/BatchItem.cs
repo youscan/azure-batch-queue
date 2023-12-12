@@ -2,7 +2,7 @@ namespace AzureBatchQueue;
 
 public class BatchItem<T>
 {
-    public BatchItem(string id, TimerBatch<T> batch, T item)
+    internal BatchItem(string id, TimerBatch<T> batch, T item)
     {
         Id = id;
         Batch = batch;

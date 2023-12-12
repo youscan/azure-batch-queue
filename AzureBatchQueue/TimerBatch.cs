@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AzureBatchQueue;
 
-public class TimerBatch<T>
+internal class TimerBatch<T>
 {
     readonly BatchQueue<T> batchQueue;
     readonly QueueMessage<T[]> msg;
