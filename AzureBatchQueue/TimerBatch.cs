@@ -13,7 +13,7 @@ internal class TimerBatch<T>
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
     readonly Timer timer;
-    bool completed;
+    BatchCompletedResult? completedResult;
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, TimeSpan flushPeriod, int maxDequeueCount,
         ILogger logger)
@@ -26,7 +26,6 @@ internal class TimerBatch<T>
         items = new ConcurrentDictionary<string, BatchItem<T>>(
             msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToDictionary(item => item.Id));
         timer = new Timer(async _ => await Flush());
-        completed = false;
     }
 
     public string MessageId => msg.MessageId.Id;
@@ -36,7 +35,6 @@ internal class TimerBatch<T>
         try
         {
             await timer.DisposeAsync();
-            completed = true;
 
             await DoFlush();
         }
@@ -59,9 +57,12 @@ internal class TimerBatch<T>
         {
             if (items.IsEmpty)
             {
+                completedResult = BatchCompletedResult.FullyProcessed;
                 await Delete();
                 return;
             }
+
+            completedResult = BatchCompletedResult.TriggeredByFlush;
 
             if (msg.DequeueCount >= maxDequeueCount)
                 await Quarantine();
@@ -82,8 +83,9 @@ internal class TimerBatch<T>
 
     public bool Complete(string itemId)
     {
-        if (completed)
-            throw new BatchCompletedException($"Failed to complete item {itemId} on an already finalized batch {msg.MessageId}");
+        if (completedResult != null)
+            throw new BatchCompletedException($"Failed to complete item {itemId} on an already finalized batch {msg.MessageId}. " +
+                                              $"Completion result: {completedResult.Value.ToString()}.");
 
         var res = items.TryRemove(itemId, out _);
         if (!res)
@@ -105,4 +107,10 @@ internal class TimerBatch<T>
 public class BatchCompletedException : Exception
 {
     public BatchCompletedException(string s) : base(s) { }
+}
+
+internal enum BatchCompletedResult
+{
+    FullyProcessed,
+    TriggeredByFlush
 }

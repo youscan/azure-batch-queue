@@ -82,33 +82,6 @@ public class BatchQueueTests
         Assert.DoesNotThrow(() => Parallel.ForEach(response, batchItem => batchItem.Complete()));
     }
 
-    [TestCase(10)]
-    [TestCase(100)]
-    [TestCase(500)]
-    public async Task When_many_clients_complete_in_parallel(int parallelCount)
-    {
-        using var queueTest = await Queue<string>();
-
-        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
-        await queueTest.BatchQueue.Send(messageBatch);
-
-        var response = await queueTest.BatchQueue.Receive();
-        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
-
-        var tasks = new Task[parallelCount];
-
-        for (var i = 0; i < parallelCount; i++)
-        {
-            tasks[i] = Task.Run(() =>
-            {
-                foreach (var item in response)
-                    item.Complete();
-            });
-        }
-
-        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
-    }
-
     [Test]
     public async Task When_quarantine_whole_batch()
     {
@@ -161,7 +134,7 @@ public class BatchQueueTests
     }
 
     [Test]
-    public async Task When_completing_same_item_twice()
+    public async Task When_completing_same_item_in_parallel()
     {
         using var queueTest = await Queue<string>();
 
@@ -178,6 +151,26 @@ public class BatchQueueTests
     }
 
     [Test]
+    public async Task When_completing_same_item_after_pause()
+    {
+        using var queueTest = await Queue<string>();
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var response = await queueTest.BatchQueue.Receive();
+
+        var completeFirst = response.Single().Complete();
+        completeFirst.Should().BeTrue();
+
+        // wait for batch to be triggered
+        await Task.Delay(TimeSpan.FromMilliseconds(10));
+
+        Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
+            .Message.Should().Contain("Completion result: FullyProcessed");
+    }
+
+    [Test]
     public async Task When_completing_item_after_batch_was_flushed()
     {
         using var queueTest = await Queue<string>();
@@ -191,7 +184,8 @@ public class BatchQueueTests
         // wait for batch to be flushed
         await Task.Delay(visibilityTimeout);
 
-        Assert.Throws<BatchCompletedException>(() => response.Single().Complete());
+        Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
+            .Message.Should().Contain("Completion result: TriggeredByFlush");
     }
 
     static async Task<BatchQueueTest<T>> Queue<T>(int maxDequeueCount = 5)
