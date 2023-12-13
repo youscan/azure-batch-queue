@@ -101,7 +101,7 @@ public class BatchQueue<T>
         }
     }
 
-    public BatchQueue<T> WithLogger(ILogger<T> queueLogger)
+    public BatchQueue<T> WithLogger(ILogger queueLogger)
     {
         logger = queueLogger;
         return this;

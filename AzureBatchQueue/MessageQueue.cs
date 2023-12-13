@@ -126,7 +126,7 @@ public class MessageQueue<T>
                 queueMessage.MessageId, queueMessage.PopReceipt);
         }
     }
-    
+
     public async Task Dequarantine(CancellationToken ct = default)
     {
         do
@@ -209,7 +209,7 @@ public class MessageQueue<T>
         await Task.WhenAll(tasks);
     }
 
-    public MessageQueue<T> WithLogger(ILogger<T> queueLogger)
+    public MessageQueue<T> WithLogger(ILogger queueLogger)
     {
         logger = queueLogger;
         return this;
