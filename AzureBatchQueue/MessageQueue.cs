@@ -126,6 +126,23 @@ public class MessageQueue<T>
                 queueMessage.MessageId, queueMessage.PopReceipt);
         }
     }
+    
+    public async Task Dequarantine(CancellationToken ct = default)
+    {
+        do
+        {
+            var response = await quarantineQueue.ReceiveMessagesAsync(MaxMessagesReceive, cancellationToken: ct);
+
+            if (!response.HasValue || response.Value.Length == 0)
+                return;
+
+            foreach (var msg in response.Value)
+            {
+                await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
+                await quarantineQueue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
+            }
+        } while (!ct.IsCancellationRequested);
+    }
 
     public async Task QuarantineMessage(QueueMessage<T> msg, CancellationToken ct = default)
     {

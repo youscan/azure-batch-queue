@@ -43,6 +43,8 @@ public class BatchQueue<T>
         return await ReceiveInternal(queue.ReceiveFromQuarantine(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
     }
 
+    public async Task Dequarantine() => await queue.Dequarantine();
+
     async Task<BatchItem<T>[]> ReceiveInternal(Task<QueueMessage<T[]>[]> receive, TimeSpan visibilityTimeout)
     {
         var flushPeriod = CalculateFlushPeriod(visibilityTimeout);

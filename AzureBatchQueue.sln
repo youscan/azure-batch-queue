@@ -8,6 +8,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{2B7E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SendReceiveBatch", "Samples\SendReceiveBatch\SendReceiveBatch.csproj", "{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dequarantine", "Samples\Dequarantine\Dequarantine.csproj", "{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,8 +28,13 @@ Global
 		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B} = {2B7ECE35-294A-4053-8244-165DBA88A9B1}
+		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B} = {2B7ECE35-294A-4053-8244-165DBA88A9B1}
 	EndGlobalSection
 EndGlobal
