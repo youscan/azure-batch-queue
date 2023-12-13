@@ -5,7 +5,7 @@ namespace AzureBatchQueue;
 
 public class BatchQueue<T>
 {
-    readonly ILogger logger;
+    ILogger logger;
 
     readonly MessageQueue<T[]> queue;
     readonly int maxDequeueCount;
@@ -97,5 +97,11 @@ public class BatchQueue<T>
         {
             logger.LogError(ex, "Failed to quarantine message {messageId}.", message.MessageId);
         }
+    }
+
+    public BatchQueue<T> WithLogger(ILogger<T> queueLogger)
+    {
+        logger = queueLogger;
+        return this;
     }
 }

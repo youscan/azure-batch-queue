@@ -12,7 +12,7 @@ namespace AzureBatchQueue;
 public class MessageQueue<T>
 {
     readonly int maxDequeueCount;
-    readonly ILogger logger;
+    ILogger logger;
     readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
     const int MaxMessagesReceive = 32;
@@ -190,6 +190,12 @@ public class MessageQueue<T>
             tasks.Add(container.DeleteAsync());
 
         await Task.WhenAll(tasks);
+    }
+
+    public MessageQueue<T> WithLogger(ILogger<T> queueLogger)
+    {
+        logger = queueLogger;
+        return this;
     }
 }
 
