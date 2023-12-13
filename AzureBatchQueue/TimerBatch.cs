@@ -92,7 +92,7 @@ internal class TimerBatch<T>
             return false;
 
         if (items.IsEmpty)
-            timer.Change(TimeSpan.FromMilliseconds(1), Timeout.InfiniteTimeSpan);
+            timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
 
         return true;
     }
