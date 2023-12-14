@@ -54,18 +54,19 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(2);
-        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
+        var longVisibilityTimeout = TimeSpan.FromSeconds(10);
+        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
         foreach (var item in response)
             item.Complete();
 
-        // wait for message to become available for read if it's not completed
-        await Task.Delay(visibilityTimeout);
+        // wait for message to flush
+        await Task.Delay(TimeSpan.FromMilliseconds(10));
 
-        var updatedResponse = await queueTest.BatchQueue.Receive();
-        updatedResponse.Should().BeEmpty();
+        // try to complete batch item again, but catch an exception that everything was already processed
+        Assert.Throws<BatchCompletedException>(() => response.First().Complete())!
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.FullyProcessed);
     }
 
     [Test]

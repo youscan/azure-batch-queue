@@ -121,9 +121,9 @@ internal class TimerBatch<T>
         if (visibilityTimeout >= TimeSpan.FromSeconds(1))
             return visibilityTimeout.Subtract(TimeSpan.FromMilliseconds(100));
 
-        logger.LogError("VisibilityTimeout {VisibilityTimeout} cannot be less that 1 sec.," +
-                        " UtcNow: {UtcNow}, messageVisibleTime: {MessageVisibleTime}, InsertedOn: {InsertedOn}",
-            visibilityTimeout, DateTimeOffset.UtcNow, Metadata.VisibilityTime, Metadata.InsertedOn);
+        logger.LogError("VisibilityTimeout {VisibilityTimeout} cannot be less that 1 sec." +
+                        " UtcNow: {UtcNow}, MessageVisibleTime: {MessageVisibleTime}, InsertedOn: {InsertedOn}",
+            visibilityTimeout, DateTimeOffset.UtcNow.ToString("O"), Metadata.VisibilityTime.ToString("O"), Metadata.InsertedOn.ToString("O"));
 
         throw new ArgumentOutOfRangeException(nameof(visibilityTimeout));
     }
