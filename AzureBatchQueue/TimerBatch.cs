@@ -83,8 +83,7 @@ internal class TimerBatch<T>
     public bool Complete(string itemId)
     {
         if (completedResult != null)
-            throw new BatchCompletedException($"Failed to complete item {itemId} on an already finalized batch {msg.MessageId}. " +
-                                              $"Completion result: {completedResult.Value.ToString()}.");
+            throw new BatchCompletedException("Failed to complete item on an already finalized batch.", itemId, msg.MessageId, completedResult.Value);
 
         var res = items.TryRemove(itemId, out _);
         if (!res)
@@ -125,16 +124,25 @@ internal class TimerBatch<T>
         if (visibilityTimeout >= TimeSpan.FromMilliseconds(30))
             return TimeSpan.FromMilliseconds(5);
 
-        throw new ArgumentOutOfRangeException($"VisibilityTimeout: {visibilityTimeout}.");
+        throw new ArgumentOutOfRangeException(nameof(visibilityTimeout));
     }
 }
 
 public class BatchCompletedException : Exception
 {
-    public BatchCompletedException(string s) : base(s) { }
+    public string BatchItemId { get; }
+    public MessageId BatchMessageId { get; }
+    public BatchCompletedResult BatchCompletedResult { get; }
+
+    public BatchCompletedException(string msg, string batchItemId, MessageId batchMessageId, BatchCompletedResult batchCompletedResult) : base(msg)
+    {
+        BatchItemId = batchItemId;
+        BatchMessageId = batchMessageId;
+        BatchCompletedResult = batchCompletedResult;
+    }
 }
 
-internal enum BatchCompletedResult
+public enum BatchCompletedResult
 {
     FullyProcessed,
     TriggeredByFlush
