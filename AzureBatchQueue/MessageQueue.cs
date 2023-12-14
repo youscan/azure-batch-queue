@@ -42,7 +42,7 @@ public class MessageQueue<T>
     {
         var payload = await Payload(item, ct: ct);
 
-        await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout, null, ct);
+        await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
 
     async Task<Payload> Payload(T item, string? blobName = null, CancellationToken ct = default)
