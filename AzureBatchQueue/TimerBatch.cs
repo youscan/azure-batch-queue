@@ -15,12 +15,11 @@ internal class TimerBatch<T>
     readonly Timer timer;
     BatchCompletedResult? completedResult;
 
-    public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, TimeSpan flushPeriod, int maxDequeueCount,
-        ILogger logger)
+    public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
     {
         this.batchQueue = batchQueue;
         this.msg = msg;
-        this.flushPeriod = flushPeriod;
+        flushPeriod = CalculateFlushPeriod(this.msg.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
         this.maxDequeueCount = maxDequeueCount;
         this.logger = logger;
         items = new ConcurrentDictionary<string, BatchItem<T>>(
@@ -101,6 +100,32 @@ internal class TimerBatch<T>
     {
         timer.Change(flushPeriod, Timeout.InfiniteTimeSpan);
         return items.Values.ToArray();
+    }
+
+    /// <summary>
+    /// Subtract a small value from visibilityTimeout, to make sure that Timer has enough time for a flush.
+    /// </summary>
+    /// <param name="visibilityTimeout"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    static TimeSpan CalculateFlushPeriod(TimeSpan visibilityTimeout)
+    {
+        if (visibilityTimeout > TimeSpan.FromSeconds(10))
+            return visibilityTimeout.Subtract(TimeSpan.FromSeconds(2));
+
+        if (visibilityTimeout > TimeSpan.FromSeconds(5))
+            return visibilityTimeout.Subtract(TimeSpan.FromSeconds(1));
+
+        if (visibilityTimeout >= TimeSpan.FromSeconds(1))
+            return visibilityTimeout.Subtract(TimeSpan.FromMilliseconds(100));
+
+        if (visibilityTimeout >= TimeSpan.FromMilliseconds(300))
+            return TimeSpan.FromMilliseconds(200);
+
+        if (visibilityTimeout >= TimeSpan.FromMilliseconds(30))
+            return TimeSpan.FromMilliseconds(5);
+
+        throw new ArgumentOutOfRangeException($"VisibilityTimeout: {visibilityTimeout}.");
     }
 }
 

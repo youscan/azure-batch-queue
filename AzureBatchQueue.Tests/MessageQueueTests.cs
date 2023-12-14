@@ -1,5 +1,3 @@
-using System.Text.Json;
-using AzureBatchQueue.Utils;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -47,7 +45,7 @@ public class MessageQueueTests
         message.Item.Should().Be(item);
 
         var updatedItem = new TestItem("Yaroslav", 26);
-        var updated = new QueueMessage<TestItem>(updatedItem, message.MessageId);
+        var updated = new QueueMessage<TestItem>(updatedItem, message.MessageId, message.VisibilityTime);
         await queueTest.Queue.UpdateMessage(updated);
 
         message = (await queueTest.Queue.Receive()).Single();
@@ -68,7 +66,7 @@ public class MessageQueueTests
         blobName.Should().NotBeEmpty();
 
         var updatedItem = new string('-', 65 * 1024);
-        var updated = new QueueMessage<string>(updatedItem, message.MessageId);
+        var updated = new QueueMessage<string>(updatedItem, message.MessageId, message.VisibilityTime);
         await queueTest.Queue.UpdateMessage(updated);
 
         message = (await queueTest.Queue.Receive()).Single();
@@ -90,7 +88,7 @@ public class MessageQueueTests
         blobName.Should().NotBeEmpty();
 
         var updatedItem = new string('+', 1 * 1024);
-        var updated = new QueueMessage<string>(updatedItem, message.MessageId);
+        var updated = new QueueMessage<string>(updatedItem, message.MessageId, message.VisibilityTime);
         await queueTest.Queue.UpdateMessage(updated);
 
         message = (await queueTest.Queue.Receive()).Single();

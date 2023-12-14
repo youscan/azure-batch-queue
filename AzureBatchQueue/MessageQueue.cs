@@ -172,7 +172,7 @@ public class MessageQueue<T>
         }
 
         var item = serializer.Deserialize(payload);
-        var msg = new QueueMessage<T>(item, new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName), m.DequeueCount);
+        var msg = new QueueMessage<T>(item, new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName), m.NextVisibleOn!.Value, m.DequeueCount);
         return msg;
     }
 
@@ -216,6 +216,6 @@ public class MessageQueue<T>
     }
 }
 
-public record QueueMessage<T>(T Item, MessageId MessageId, long DequeueCount = 0);
+public record QueueMessage<T>(T Item, MessageId MessageId, DateTimeOffset VisibilityTime, long DequeueCount = 0);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
 public record Payload(byte[] Data, bool UsingBlob);

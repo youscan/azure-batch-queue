@@ -10,8 +10,6 @@ public class BatchQueue<T>
     readonly MessageQueue<T[]> queue;
     readonly int maxDequeueCount;
 
-    readonly TimeSpan defaultReceiveVisibilityTimeout = TimeSpan.FromSeconds(30);
-
     public BatchQueue(
         string connectionString,
         string queueName,
@@ -29,57 +27,21 @@ public class BatchQueue<T>
 
     public async Task Send(T[] items) => await queue.Send(items);
 
-    public async Task<BatchItem<T>[]> Receive(int maxMessages = 32, TimeSpan? visibilityTimeout = null,
-        CancellationToken ct = default)
+    public async Task<BatchItem<T>[]> Receive(int maxMessages = 32, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);
-        return await ReceiveInternal(queue.Receive(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
-    }
-
-    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int maxMessages = 32, TimeSpan? visibilityTimeout = null,
-        CancellationToken ct = default)
-    {
-        var validatedTimeout = ValidVisibilityTimeout(visibilityTimeout);
-        return await ReceiveInternal(queue.ReceiveFromQuarantine(maxMessages, validatedTimeout, ct: ct), validatedTimeout);
-    }
-
-    public async Task Dequarantine() => await queue.Dequarantine();
-
-    async Task<BatchItem<T>[]> ReceiveInternal(Task<QueueMessage<T[]>[]> receive, TimeSpan visibilityTimeout)
-    {
-        var flushPeriod = CalculateFlushPeriod(visibilityTimeout);
-
-        var arrayOfBatches = await receive;
-        var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, flushPeriod, maxDequeueCount, logger)).ToList();
-
+        var arrayOfBatches = await queue.Receive(maxMessages, visibilityTimeout, ct: ct);
+        var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, maxDequeueCount, logger)).ToList();
         return timerBatches.SelectMany(x => x.Unpack()).ToArray();
     }
 
-    TimeSpan ValidVisibilityTimeout(TimeSpan? visibilityTimeout)
+    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int maxMessages = 32, CancellationToken ct = default)
     {
-        if (visibilityTimeout == null)
-            return defaultReceiveVisibilityTimeout;
-
-        if (visibilityTimeout < TimeSpan.FromSeconds(1))
-            throw new ArgumentOutOfRangeException("VisibilityTimeout");
-
-        return visibilityTimeout.Value;
+        var arrayOfBatches = await queue.ReceiveFromQuarantine(maxMessages, ct: ct);
+        var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, maxDequeueCount, logger)).ToList();
+        return timerBatches.SelectMany(x => x.Unpack()).ToArray();
     }
 
-    // don't be too harsh on me, this is just to test it on high load
-    static TimeSpan CalculateFlushPeriod(TimeSpan visibilityTimeout)
-    {
-        if (visibilityTimeout > TimeSpan.FromSeconds(10))
-            return visibilityTimeout.Subtract(TimeSpan.FromSeconds(2));
-
-        if (visibilityTimeout > TimeSpan.FromSeconds(5))
-            return visibilityTimeout.Subtract(TimeSpan.FromSeconds(1));
-
-        if (visibilityTimeout >= TimeSpan.FromSeconds(1))
-            return visibilityTimeout.Subtract(TimeSpan.FromMilliseconds(500));
-
-        throw new ArgumentOutOfRangeException("VisibilityTimeout");
-    }
+    public async Task Dequarantine() => await queue.Dequarantine();
 
     public async Task Init() => await queue.Init();
     public async Task Delete() => await queue.Delete();
