@@ -1,5 +1,5 @@
-using Azure.Storage.Queues.Models;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace AzureBatchQueue.Tests;
@@ -27,7 +27,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(1);
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
         foreach (var item in response)
@@ -54,7 +54,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(1.5);
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
@@ -91,7 +91,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(1.5);
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
@@ -113,7 +113,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(1.5);
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
@@ -178,7 +178,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(1);
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
 
         // wait for batch to be flushed
@@ -199,7 +199,18 @@ public class BatchQueueTests
     {
         public async Task Init(int maxDequeueCount)
         {
-            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", "batch-test", maxDequeueCount);
+            var loggerFactory =
+                LoggerFactory.Create(builder =>
+                    builder.AddSimpleConsole(options =>
+                    {
+                        options.IncludeScopes = true;
+                        options.SingleLine = true;
+                        options.TimestampFormat = "HH:mm:ss ";
+                    }));
+
+            var logger = loggerFactory.CreateLogger<BatchQueueTest<T>>();
+
+            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", "batch-test", maxDequeueCount, logger: logger);
             await BatchQueue.Init();
         }
 

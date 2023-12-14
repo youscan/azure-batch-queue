@@ -18,9 +18,10 @@ internal class TimerBatch<T>
     {
         this.batchQueue = batchQueue;
         this.msg = msg;
-        FlushPeriod = CalculateFlushPeriod(this.msg.Metadata.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
-        this.maxDequeueCount = maxDequeueCount;
         this.logger = logger;
+        this.maxDequeueCount = maxDequeueCount;
+
+        FlushPeriod = CalculateFlushPeriod(this.msg.Metadata.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
         items = new ConcurrentDictionary<string, BatchItem<T>>(
             msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToDictionary(item => item.Id));
         timer = new Timer(async _ => await Flush());
@@ -109,7 +110,7 @@ internal class TimerBatch<T>
     /// <param name="visibilityTimeout"></param>
     /// <returns></returns>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    static TimeSpan CalculateFlushPeriod(TimeSpan visibilityTimeout)
+    TimeSpan CalculateFlushPeriod(TimeSpan visibilityTimeout)
     {
         if (visibilityTimeout > TimeSpan.FromSeconds(10))
             return visibilityTimeout.Subtract(TimeSpan.FromSeconds(2));
@@ -120,11 +121,9 @@ internal class TimerBatch<T>
         if (visibilityTimeout >= TimeSpan.FromSeconds(1))
             return visibilityTimeout.Subtract(TimeSpan.FromMilliseconds(100));
 
-        if (visibilityTimeout >= TimeSpan.FromMilliseconds(300))
-            return TimeSpan.FromMilliseconds(200);
-
-        if (visibilityTimeout >= TimeSpan.FromMilliseconds(30))
-            return TimeSpan.FromMilliseconds(5);
+        logger.LogError("VisibilityTimeout {VisibilityTimeout} cannot be less that 1 sec.," +
+                        " UtcNow: {UtcNow}, messageVisibleTime: {MessageVisibleTime}, InsertedOn: {InsertedOn}",
+            visibilityTimeout, DateTimeOffset.UtcNow, Metadata.VisibilityTime, Metadata.InsertedOn);
 
         throw new ArgumentOutOfRangeException(nameof(visibilityTimeout));
     }

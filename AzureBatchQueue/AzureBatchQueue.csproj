@@ -9,7 +9,7 @@
     <ItemGroup>
       <PackageReference Include="Azure.Storage.Blobs" Version="12.19.0" />
       <PackageReference Include="Azure.Storage.Queues" Version="12.16.0" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="7.0.1" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     </ItemGroup>
 
