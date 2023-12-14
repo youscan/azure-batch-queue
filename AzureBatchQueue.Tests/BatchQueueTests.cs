@@ -100,8 +100,8 @@ public class BatchQueueTests
         // wait for message to be quarantined
         await Task.Delay(visibilityTimeout);
 
-        var responseFromQuarantine = await queueTest.BatchQueue.ReceiveFromQuarantine();
-        responseFromQuarantine.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+        var responseFromQuarantine = await queueTest.BatchQueue.GetItemsFromQuarantine();
+        responseFromQuarantine.Should().BeEquivalentTo(messageBatch);
     }
 
     [Test]
@@ -129,8 +129,8 @@ public class BatchQueueTests
         // wait for message to be quarantined
         await Task.Delay(visibilityTimeout);
 
-        var responseFromQuarantine = await queueTest.BatchQueue.ReceiveFromQuarantine();
-        responseFromQuarantine.Select(x => x.Item).Should().BeEquivalentTo(failedItem);
+        var responseFromQuarantine = await queueTest.BatchQueue.GetItemsFromQuarantine();
+        responseFromQuarantine.Should().BeEquivalentTo(failedItem);
     }
 
     [Test]

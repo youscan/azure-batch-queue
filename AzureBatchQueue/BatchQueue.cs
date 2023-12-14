@@ -34,11 +34,10 @@ public class BatchQueue<T>
         return timerBatches.SelectMany(x => x.Unpack()).ToArray();
     }
 
-    public async Task<BatchItem<T>[]> ReceiveFromQuarantine(int maxMessages = 32, CancellationToken ct = default)
+    public async Task<T[]> GetItemsFromQuarantine(int maxMessages = 32, CancellationToken ct = default)
     {
         var arrayOfBatches = await queue.ReceiveFromQuarantine(maxMessages, ct: ct);
-        var timerBatches = arrayOfBatches.Select(batch => new TimerBatch<T>(this, batch, maxDequeueCount, logger)).ToList();
-        return timerBatches.SelectMany(x => x.Unpack()).ToArray();
+        return arrayOfBatches.SelectMany(x => x.Item).ToArray();
     }
 
     public async Task Dequarantine() => await queue.Dequarantine();
