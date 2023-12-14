@@ -167,7 +167,7 @@ public class BatchQueueTests
         await Task.Delay(TimeSpan.FromMilliseconds(10));
 
         Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
-            .Message.Should().Contain("Completion result: FullyProcessed");
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.FullyProcessed);
     }
 
     [Test]
@@ -185,7 +185,7 @@ public class BatchQueueTests
         await Task.Delay(visibilityTimeout);
 
         Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
-            .Message.Should().Contain("Completion result: TriggeredByFlush");
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.TriggeredByFlush);
     }
 
     static async Task<BatchQueueTest<T>> Queue<T>(int maxDequeueCount = 5)

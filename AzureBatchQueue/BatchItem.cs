@@ -7,12 +7,16 @@ public class BatchItem<T>
         Id = id;
         Batch = batch;
         Item = item;
+        Metadata = new BatchItemMetadata(id, Batch.MessageId, Batch.Metadata.VisibilityTime, Batch.FlushPeriod, Batch.Metadata.InsertedOn);
     }
 
     public string Id { get; }
-    public string BatchId => Batch.MessageId;
     public T Item { get; }
     TimerBatch<T> Batch { get; }
 
+    public BatchItemMetadata Metadata { get; }
+
     public bool Complete() => Batch.Complete(Id);
 }
+
+public record BatchItemMetadata(string BatchItemId, MessageId BatchId, DateTimeOffset VisibilityTime, TimeSpan FlushPeriod, DateTimeOffset InsertedOn);

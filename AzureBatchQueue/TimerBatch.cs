@@ -7,7 +7,6 @@ internal class TimerBatch<T>
 {
     readonly BatchQueue<T> batchQueue;
     readonly QueueMessage<T[]> msg;
-    readonly TimeSpan flushPeriod;
     readonly int maxDequeueCount;
     readonly ILogger logger;
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
@@ -19,7 +18,7 @@ internal class TimerBatch<T>
     {
         this.batchQueue = batchQueue;
         this.msg = msg;
-        flushPeriod = CalculateFlushPeriod(this.msg.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
+        FlushPeriod = CalculateFlushPeriod(this.msg.Metadata.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
         this.maxDequeueCount = maxDequeueCount;
         this.logger = logger;
         items = new ConcurrentDictionary<string, BatchItem<T>>(
@@ -27,7 +26,9 @@ internal class TimerBatch<T>
         timer = new Timer(async _ => await Flush());
     }
 
-    public string MessageId => msg.MessageId.Id;
+    public MessageId MessageId => msg.MessageId;
+    public QueueMessageMetadata Metadata => msg.Metadata;
+    public TimeSpan FlushPeriod { get; }
 
     async Task Flush()
     {
@@ -83,7 +84,8 @@ internal class TimerBatch<T>
     public bool Complete(string itemId)
     {
         if (completedResult != null)
-            throw new BatchCompletedException("Failed to complete item on an already finalized batch.", itemId, msg.MessageId, completedResult.Value);
+            throw new BatchCompletedException("Failed to complete item on an already finalized batch.",
+                new BatchItemMetadata(itemId, msg.MessageId, msg.Metadata.VisibilityTime, FlushPeriod, msg.Metadata.InsertedOn), completedResult.Value);
 
         var res = items.TryRemove(itemId, out _);
         if (!res)
@@ -97,7 +99,7 @@ internal class TimerBatch<T>
 
     public IEnumerable<BatchItem<T>> Unpack()
     {
-        timer.Change(flushPeriod, Timeout.InfiniteTimeSpan);
+        timer.Change(FlushPeriod, Timeout.InfiniteTimeSpan);
         return items.Values.ToArray();
     }
 
@@ -130,15 +132,13 @@ internal class TimerBatch<T>
 
 public class BatchCompletedException : Exception
 {
-    public string BatchItemId { get; }
-    public MessageId BatchMessageId { get; }
+    public BatchItemMetadata BatchItemMetadata { get; }
     public BatchCompletedResult BatchCompletedResult { get; }
 
-    public BatchCompletedException(string msg, string batchItemId, MessageId batchMessageId, BatchCompletedResult batchCompletedResult) : base(msg)
+    public BatchCompletedException(string msg, BatchItemMetadata batchItemMetadata, BatchCompletedResult completedResult) : base(msg)
     {
-        BatchItemId = batchItemId;
-        BatchMessageId = batchMessageId;
-        BatchCompletedResult = batchCompletedResult;
+        BatchItemMetadata = batchItemMetadata;
+        BatchCompletedResult = completedResult;
     }
 }
 
