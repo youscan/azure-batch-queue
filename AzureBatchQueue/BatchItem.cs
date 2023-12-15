@@ -16,7 +16,7 @@ public class BatchItem<T>
 
     public BatchItemMetadata Metadata { get; }
 
-    public bool Complete() => Batch.Complete(Id);
+    public BatchItemCompleteResult Complete() => Batch.Complete(Id);
 }
 
 public record BatchItemMetadata(string BatchItemId, MessageId BatchId, DateTimeOffset VisibilityTime, TimeSpan FlushPeriod, DateTimeOffset InsertedOn);

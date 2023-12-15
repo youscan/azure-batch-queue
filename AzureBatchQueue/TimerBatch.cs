@@ -82,7 +82,7 @@ internal class TimerBatch<T>
         return msg with { Item = notCompletedItems };
     }
 
-    public bool Complete(string itemId)
+    public BatchItemCompleteResult Complete(string itemId)
     {
         if (completedResult != null)
             throw new BatchCompletedException("Failed to complete item on an already finalized batch.",
@@ -90,12 +90,15 @@ internal class TimerBatch<T>
 
         var res = items.TryRemove(itemId, out _);
         if (!res)
-            return false;
+            return BatchItemCompleteResult.NotFound;
 
         if (items.IsEmpty)
+        {
             timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+            return BatchItemCompleteResult.BatchFullyProcessed;
+        }
 
-        return true;
+        return BatchItemCompleteResult.Completed;
     }
 
     public IEnumerable<BatchItem<T>> Unpack()
@@ -145,4 +148,11 @@ public enum BatchCompletedResult
 {
     FullyProcessed,
     TriggeredByFlush
+}
+
+public enum BatchItemCompleteResult
+{
+    Completed,
+    BatchFullyProcessed,
+    NotFound
 }

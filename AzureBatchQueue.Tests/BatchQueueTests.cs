@@ -147,8 +147,8 @@ public class BatchQueueTests
         var completeFirst = response.Single().Complete();
         var completeSecond = response.Single().Complete();
 
-        completeFirst.Should().BeTrue();
-        completeSecond.Should().BeFalse();
+        completeFirst.Should().Be(BatchItemCompleteResult.BatchFullyProcessed);
+        completeSecond.Should().Be(BatchItemCompleteResult.NotFound);
     }
 
     [Test]
@@ -162,7 +162,7 @@ public class BatchQueueTests
         var response = await queueTest.BatchQueue.Receive();
 
         var completeFirst = response.Single().Complete();
-        completeFirst.Should().BeTrue();
+        completeFirst.Should().Be(BatchItemCompleteResult.BatchFullyProcessed);
 
         // wait for batch to be triggered
         await Task.Delay(TimeSpan.FromMilliseconds(10));
