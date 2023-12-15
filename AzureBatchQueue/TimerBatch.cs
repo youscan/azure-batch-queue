@@ -12,7 +12,7 @@ internal class TimerBatch<T>
     readonly ILogger logger;
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
-    readonly Timer timer;
+    Timer? timer;
     BatchCompletedResult? completedResult;
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
@@ -36,7 +36,7 @@ internal class TimerBatch<T>
     {
         try
         {
-            await timer.DisposeAsync();
+            DisposeTimer();
 
             await DoFlush();
         }
@@ -57,6 +57,9 @@ internal class TimerBatch<T>
 
         async Task DoFlush()
         {
+            if (completedResult != null)
+                return;
+
             if (items.IsEmpty)
             {
                 completedResult = BatchCompletedResult.FullyProcessed;
@@ -77,6 +80,16 @@ internal class TimerBatch<T>
         }
     }
 
+    /// <summary>
+    /// Set timer reference to null, so that call to timer in Complete() will not throw ObjectDisposedException
+    /// </summary>
+    void DisposeTimer()
+    {
+        var timerCopy = timer;
+        timer = null;
+        timerCopy.Dispose();
+    }
+
     QueueMessage<T[]> Message()
     {
         var notCompletedItems = items.Values.Select(x => x.Item).ToArray();
@@ -93,13 +106,11 @@ internal class TimerBatch<T>
         if (!res)
             throw new ItemNotFoundException(itemId);
 
-        if (items.IsEmpty)
-        {
-            timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
-            return BatchItemCompleteResult.BatchFullyProcessed;
-        }
+        if (!items.IsEmpty)
+            return BatchItemCompleteResult.Completed;
 
-        return BatchItemCompleteResult.Completed;
+        timer?.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
     public IEnumerable<BatchItem<T>> Unpack()
