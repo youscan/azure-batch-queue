@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AzureBatchQueue.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace AzureBatchQueue;
@@ -90,7 +91,7 @@ internal class TimerBatch<T>
 
         var res = items.TryRemove(itemId, out _);
         if (!res)
-            return BatchItemCompleteResult.NotFound;
+            throw new ItemNotFoundException(itemId);
 
         if (items.IsEmpty)
         {
@@ -153,6 +154,5 @@ public enum BatchCompletedResult
 public enum BatchItemCompleteResult
 {
     Completed,
-    BatchFullyProcessed,
-    NotFound
+    BatchFullyProcessed
 }

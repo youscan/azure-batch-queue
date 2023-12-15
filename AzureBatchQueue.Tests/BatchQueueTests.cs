@@ -1,3 +1,4 @@
+using AzureBatchQueue.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
@@ -135,20 +136,17 @@ public class BatchQueueTests
     }
 
     [Test]
-    public async Task When_completing_same_item_in_parallel()
+    public async Task When_completing_same_item_twice_throws_exception()
     {
         using var queueTest = await Queue<string>();
 
-        var messageBatch = new[] { "orange" };
+        var messageBatch = new[] { "orange", "apple" };
         await queueTest.BatchQueue.Send(messageBatch);
 
         var response = await queueTest.BatchQueue.Receive();
 
-        var completeFirst = response.Single().Complete();
-        var completeSecond = response.Single().Complete();
-
-        completeFirst.Should().Be(BatchItemCompleteResult.BatchFullyProcessed);
-        completeSecond.Should().Be(BatchItemCompleteResult.NotFound);
+        response.First().Complete().Should().Be(BatchItemCompleteResult.Completed);
+        Assert.Throws<ItemNotFoundException>(() => response.First().Complete());
     }
 
     [Test]
