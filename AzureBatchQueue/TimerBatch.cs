@@ -12,8 +12,11 @@ internal class TimerBatch<T>
     readonly ILogger logger;
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
-    Timer? timer;
+    readonly Timer timer;
     BatchCompletedResult? completedResult;
+
+    bool flushTriggered;
+    readonly object locker = new();
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
     {
@@ -85,9 +88,14 @@ internal class TimerBatch<T>
     /// </summary>
     void DisposeTimer()
     {
-        var timerCopy = timer;
-        timer = null;
-        timerCopy.Dispose();
+        lock (locker)
+        {
+            if (flushTriggered)
+                return;
+
+            flushTriggered = true;
+            timer.Dispose();
+        }
     }
 
     QueueMessage<T[]> Message()
@@ -109,7 +117,12 @@ internal class TimerBatch<T>
         if (!items.IsEmpty)
             return BatchItemCompleteResult.Completed;
 
-        timer?.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        lock (locker)
+        {
+            if (!flushTriggered)
+                timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        }
+
         return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
