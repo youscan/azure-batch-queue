@@ -12,8 +12,11 @@ internal class TimerBatch<T>
     readonly ILogger logger;
     readonly ConcurrentDictionary<string, BatchItem<T>> items;
 
-    Timer? timer;
+    readonly Timer timer;
     BatchCompletedResult? completedResult;
+
+    bool flushTriggered;
+    readonly object locker = new();
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
     {
@@ -34,10 +37,21 @@ internal class TimerBatch<T>
 
     async Task Flush()
     {
+        // check if value is already set before acquiring a lock
+        if (flushTriggered)
+            return;
+
+        lock (locker)
+        {
+            if (flushTriggered)
+                return;
+
+            flushTriggered = true;
+            timer.Dispose();
+        }
+
         try
         {
-            DisposeTimer();
-
             await DoFlush();
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
@@ -80,16 +94,6 @@ internal class TimerBatch<T>
         }
     }
 
-    /// <summary>
-    /// Set timer reference to null, so that call to timer in Complete() will not throw ObjectDisposedException
-    /// </summary>
-    void DisposeTimer()
-    {
-        var timerCopy = timer;
-        timer = null;
-        timerCopy.Dispose();
-    }
-
     QueueMessage<T[]> Message()
     {
         var notCompletedItems = items.Values.Select(x => x.Item).ToArray();
@@ -109,7 +113,12 @@ internal class TimerBatch<T>
         if (!items.IsEmpty)
             return BatchItemCompleteResult.Completed;
 
-        timer?.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        lock (locker)
+        {
+            if (!flushTriggered)
+                timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        }
+
         return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
