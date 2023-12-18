@@ -15,6 +15,8 @@ internal class TimerBatch<T>
     Timer? timer;
     BatchCompletedResult? completedResult;
 
+    readonly object locker = new();
+
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
     {
         this.batchQueue = batchQueue;
@@ -85,9 +87,12 @@ internal class TimerBatch<T>
     /// </summary>
     void DisposeTimer()
     {
-        var timerCopy = timer;
-        timer = null;
-        timerCopy.Dispose();
+        lock (locker)
+        {
+            var timerCopy = timer;
+            timer = null;
+            timerCopy.Dispose();
+        }
     }
 
     QueueMessage<T[]> Message()
