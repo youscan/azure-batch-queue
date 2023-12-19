@@ -112,10 +112,7 @@ internal class TimerBatch<T>
 
         var remaining = items.Remove(itemId);
 
-        if (remaining > 0)
-            return;
-
-        if (flushTriggered)
+        if (remaining > 0 || flushTriggered)
             return;
 
         lock (locker)

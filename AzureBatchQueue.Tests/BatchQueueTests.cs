@@ -169,6 +169,22 @@ public class BatchQueueTests
     }
 
     [Test]
+    public async Task When_timer_flushes_after_disposed_queue_test()
+    {
+        using var queueTest = await Queue<string>();
+
+        var messageBatch = new[] { "orange" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var visibilityTimeout = TimeSpan.FromSeconds(2);
+        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
+
+        queueTest.Dispose();
+
+        response.Single().Complete();
+    }
+
+    [Test]
     public async Task When_completing_item_after_batch_was_flushed()
     {
         using var queueTest = await Queue<string>();
@@ -180,7 +196,7 @@ public class BatchQueueTests
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
 
         // wait for batch to be flushed
-        await Task.Delay(visibilityTimeout.Add(TimeSpan.FromMilliseconds(200)));
+        await Task.Delay(visibilityTimeout.Add(TimeSpan.FromMilliseconds(500)));
 
         Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
             .BatchCompletedResult.Should().Be(BatchCompletedResult.TriggeredByFlush);
@@ -208,12 +224,12 @@ public class BatchQueueTests
 
             var logger = loggerFactory.CreateLogger<BatchQueueTest<T>>();
 
-            var random = new Random().NextInt64(0, 1000);
+            var random = new Random().NextInt64(0, int.MaxValue);
             BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", $"batch-test-{random}", maxDequeueCount, logger: logger);
             await BatchQueue.Init();
         }
 
         public BatchQueue<T> BatchQueue { get; private set; }
-        public void Dispose() => BatchQueue.Delete().GetAwaiter().GetResult();
+        public void Dispose() => BatchQueue.ClearMessages().GetAwaiter().GetResult();
     }
 }

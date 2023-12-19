@@ -44,6 +44,7 @@ public class BatchQueue<T>
 
     public async Task Init() => await queue.Init();
     public async Task Delete() => await queue.Delete();
+    public async Task ClearMessages() => await queue.ClearMessages();
 
     public async Task DeleteMessage(MessageId msgId, CancellationToken ct = default) => await queue.DeleteMessage(msgId, ct);
     public async Task UpdateMessage(QueueMessage<T[]> message, CancellationToken ct = default) => await queue.UpdateMessage(message, ct: ct);

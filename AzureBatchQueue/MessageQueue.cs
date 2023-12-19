@@ -211,6 +211,8 @@ public class MessageQueue<T>
         await Task.WhenAll(tasks);
     }
 
+    public async Task ClearMessages() => await queue.ClearMessagesAsync();
+
     public MessageQueue<T> WithLogger(ILogger queueLogger)
     {
         logger = queueLogger;
