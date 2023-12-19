@@ -93,7 +93,7 @@ internal class TimerBatch<T>
         return msg with { Item = notCompletedItems };
     }
 
-    public BatchItemCompleteResult Complete(BatchItemId itemId)
+    public void Complete(BatchItemId itemId)
     {
         if (completedResult != null)
         {
@@ -104,18 +104,16 @@ internal class TimerBatch<T>
         var remaining = items.Remove(itemId);
 
         if (remaining > 0)
-            return BatchItemCompleteResult.Completed;
+            return;
 
         if (flushTriggered)
-            return BatchItemCompleteResult.BatchFullyProcessed;
+            return;
 
         lock (locker)
         {
             if (!flushTriggered)
                 timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
-
-        return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
     public BatchItem<T>[] Unpack()
@@ -179,10 +177,4 @@ public enum BatchCompletedResult
 {
     FullyProcessed,
     TriggeredByFlush
-}
-
-public enum BatchItemCompleteResult
-{
-    Completed,
-    BatchFullyProcessed
 }
