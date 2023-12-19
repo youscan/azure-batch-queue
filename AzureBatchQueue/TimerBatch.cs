@@ -175,18 +175,6 @@ internal class BatchItemsCollection<T>
     public BatchItem<T>?[] Items() => items;
 }
 
-public class BatchCompletedException : Exception
-{
-    public BatchItemMetadata BatchItemMetadata { get; }
-    public BatchCompletedResult BatchCompletedResult { get; }
-
-    public BatchCompletedException(string msg, BatchItemMetadata batchItemMetadata, BatchCompletedResult completedResult) : base(msg)
-    {
-        BatchItemMetadata = batchItemMetadata;
-        BatchCompletedResult = completedResult;
-    }
-}
-
 public enum BatchCompletedResult
 {
     FullyProcessed,
