@@ -106,7 +106,9 @@ internal class TimerBatch<T>
         if (remaining > 0)
             return BatchItemCompleteResult.Completed;
 
-        // already processed all items, trigger batch flush
+        if (flushTriggered)
+            return BatchItemCompleteResult.BatchFullyProcessed;
+
         lock (locker)
         {
             if (!flushTriggered)
@@ -151,7 +153,6 @@ internal class BatchItemsCollection<T>
 {
     readonly BatchItem<T>?[] items;
     int remainingCount;
-    readonly object locker = new();
 
     public BatchItemsCollection(BatchItem<T>[] items)
     {
@@ -161,16 +162,11 @@ internal class BatchItemsCollection<T>
 
     public int Remove(BatchItemId id)
     {
-        lock (locker)
-        {
-            if (items[id.Idx] == null)
-                throw new ItemNotFoundException(id.ToString());
+        if (items[id.Idx] == null)
+            throw new ItemNotFoundException(id.ToString());
 
-            items[id.Idx] = null;
-            Interlocked.Decrement(ref remainingCount);
-
-            return remainingCount;
-        }
+        items[id.Idx] = null;
+        return Interlocked.Decrement(ref remainingCount);
     }
 
     public int RemainingCount() => remainingCount;
