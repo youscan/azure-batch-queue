@@ -28,7 +28,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(2);
+        var visibilityTimeout = TimeSpan.FromSeconds(3);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
         foreach (var item in response)
@@ -93,7 +93,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(2);
+        var visibilityTimeout = TimeSpan.FromSeconds(3);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
@@ -115,7 +115,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(2);
+        var visibilityTimeout = TimeSpan.FromSeconds(3);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
@@ -177,7 +177,7 @@ public class BatchQueueTests
         var messageBatch = new[] { "orange" };
         await queueTest.BatchQueue.Send(messageBatch);
 
-        var visibilityTimeout = TimeSpan.FromSeconds(2);
+        var visibilityTimeout = TimeSpan.FromSeconds(3);
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
 
         // wait for batch to be flushed
