@@ -69,17 +69,17 @@ internal class TimerBatch<T>
 
             if (items.RemainingCount() == 0)
             {
-                completedResult = BatchCompletedResult.FullyProcessed;
                 await Delete();
+                completedResult = BatchCompletedResult.FullyProcessed;
                 return;
             }
-
-            completedResult = BatchCompletedResult.TriggeredByFlush;
 
             if (msg.DequeueCount >= maxDequeueCount)
                 await Quarantine();
             else
                 await Update();
+
+            completedResult = BatchCompletedResult.TriggeredByFlush;
 
             async Task Update() => await batchQueue.UpdateMessage(Message());
             async Task Delete() => await batchQueue.DeleteMessage(msg.MessageId);
