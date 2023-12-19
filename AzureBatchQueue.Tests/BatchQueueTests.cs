@@ -145,7 +145,7 @@ public class BatchQueueTests
 
         var response = await queueTest.BatchQueue.Receive();
 
-        response.First().Complete().Should().Be(BatchItemCompleteResult.Completed);
+        Assert.DoesNotThrow(() => response.First().Complete());
         Assert.Throws<ItemNotFoundException>(() => response.First().Complete());
     }
 
@@ -159,8 +159,7 @@ public class BatchQueueTests
 
         var response = await queueTest.BatchQueue.Receive();
 
-        var completeFirst = response.Single().Complete();
-        completeFirst.Should().Be(BatchItemCompleteResult.BatchFullyProcessed);
+        Assert.DoesNotThrow(() => response.First().Complete());
 
         // wait for batch to be triggered
         await Task.Delay(TimeSpan.FromMilliseconds(10));
@@ -181,7 +180,7 @@ public class BatchQueueTests
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
 
         // wait for batch to be flushed
-        await Task.Delay(visibilityTimeout);
+        await Task.Delay(visibilityTimeout.Add(TimeSpan.FromMilliseconds(200)));
 
         Assert.Throws<BatchCompletedException>(() => response.Single().Complete())!
             .BatchCompletedResult.Should().Be(BatchCompletedResult.TriggeredByFlush);
@@ -209,7 +208,8 @@ public class BatchQueueTests
 
             var logger = loggerFactory.CreateLogger<BatchQueueTest<T>>();
 
-            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", "batch-test", maxDequeueCount, logger: logger);
+            var random = new Random().NextInt64(0, 1000);
+            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", $"batch-test-{random}", maxDequeueCount, logger: logger);
             await BatchQueue.Init();
         }
 

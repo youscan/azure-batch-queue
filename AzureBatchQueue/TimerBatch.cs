@@ -102,7 +102,7 @@ internal class TimerBatch<T>
         return msg with { Item = notCompletedItems };
     }
 
-    public BatchItemCompleteResult Complete(BatchItemId itemId)
+    public void Complete(BatchItemId itemId)
     {
         if (completedResult != null)
         {
@@ -113,18 +113,16 @@ internal class TimerBatch<T>
         var remaining = items.Remove(itemId);
 
         if (remaining > 0)
-            return BatchItemCompleteResult.Completed;
+            return;
 
         if (flushTriggered)
-            return BatchItemCompleteResult.BatchFullyProcessed;
+            return;
 
         lock (locker)
         {
             if (!flushTriggered)
                 timer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
-
-        return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
     public BatchItem<T>[] Unpack()
@@ -184,26 +182,8 @@ internal class BatchItemsCollection<T>
     public BatchItem<T>?[] Items() => items;
 }
 
-public class BatchCompletedException : Exception
-{
-    public BatchItemMetadata BatchItemMetadata { get; }
-    public BatchCompletedResult BatchCompletedResult { get; }
-
-    public BatchCompletedException(string msg, BatchItemMetadata batchItemMetadata, BatchCompletedResult completedResult) : base(msg)
-    {
-        BatchItemMetadata = batchItemMetadata;
-        BatchCompletedResult = completedResult;
-    }
-}
-
 public enum BatchCompletedResult
 {
     FullyProcessed,
     TriggeredByFlush
-}
-
-public enum BatchItemCompleteResult
-{
-    Completed,
-    BatchFullyProcessed
 }
