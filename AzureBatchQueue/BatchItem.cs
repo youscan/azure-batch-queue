@@ -2,15 +2,15 @@ namespace AzureBatchQueue;
 
 public class BatchItem<T>
 {
-    internal BatchItem(string id, TimerBatch<T> batch, T item)
+    internal BatchItem(BatchItemId id, TimerBatch<T> batch, T item)
     {
         Id = id;
         Batch = batch;
         Item = item;
-        Metadata = new BatchItemMetadata(id, Batch.MessageId, Batch.Metadata.VisibilityTime, Batch.FlushPeriod, Batch.Metadata.InsertedOn);
+        Metadata = new BatchItemMetadata(id.ToString(), Batch.MessageId, Batch.Metadata.VisibilityTime, Batch.FlushPeriod, Batch.Metadata.InsertedOn);
     }
 
-    public string Id { get; }
+    public BatchItemId Id { get; }
     public T Item { get; }
     TimerBatch<T> Batch { get; }
 
@@ -18,5 +18,10 @@ public class BatchItem<T>
 
     public BatchItemCompleteResult Complete() => Batch.Complete(Id);
 }
+
+public record BatchItemId(string BatchId, int Idx)
+{
+    public override string ToString() => $"{BatchId}_{Idx}";
+};
 
 public record BatchItemMetadata(string BatchItemId, MessageId BatchId, DateTimeOffset VisibilityTime, TimeSpan FlushPeriod, DateTimeOffset InsertedOn);

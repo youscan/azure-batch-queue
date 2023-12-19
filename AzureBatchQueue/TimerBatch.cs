@@ -10,7 +10,7 @@ internal class TimerBatch<T>
     readonly QueueMessage<T[]> msg;
     readonly int maxDequeueCount;
     readonly ILogger logger;
-    readonly ConcurrentDictionary<string, BatchItem<T>> items;
+    readonly BatchItemsCollection<T> items;
 
     readonly Timer timer;
     BatchCompletedResult? completedResult;
@@ -26,8 +26,10 @@ internal class TimerBatch<T>
         this.maxDequeueCount = maxDequeueCount;
 
         FlushPeriod = CalculateFlushPeriod(this.msg.Metadata.VisibilityTime.Subtract(DateTimeOffset.UtcNow));
-        items = new ConcurrentDictionary<string, BatchItem<T>>(
-            msg.Item.Select((x, idx) => new BatchItem<T>($"{msg.MessageId.Id}_{idx}", this, x)).ToDictionary(item => item.Id));
+
+        var batchItems = msg.Item.Select((x, idx) => new BatchItem<T>(new BatchItemId(msg.MessageId.Id, idx), this, x)).ToArray();
+        items = new BatchItemsCollection<T>(batchItems);
+
         timer = new Timer(async _ => await Flush());
     }
 
@@ -57,7 +59,7 @@ internal class TimerBatch<T>
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
         {
             logger.LogWarning(ex, "Queue {queueName} was not found when flushing {messageId} with {itemsCount} items left.",
-                batchQueue.Name, msg.MessageId, items.Count);
+                batchQueue.Name, msg.MessageId, items.RemainingCount());
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
@@ -74,7 +76,7 @@ internal class TimerBatch<T>
             if (completedResult != null)
                 return;
 
-            if (items.IsEmpty)
+            if (items.RemainingCount() == 0)
             {
                 completedResult = BatchCompletedResult.FullyProcessed;
                 await Delete();
@@ -96,23 +98,24 @@ internal class TimerBatch<T>
 
     QueueMessage<T[]> Message()
     {
-        var notCompletedItems = items.Values.Select(x => x.Item).ToArray();
+        var notCompletedItems = items.NotEmptyItems().Select(x => x.Item).ToArray();
         return msg with { Item = notCompletedItems };
     }
 
-    public BatchItemCompleteResult Complete(string itemId)
+    public BatchItemCompleteResult Complete(BatchItemId itemId)
     {
         if (completedResult != null)
+        {
             throw new BatchCompletedException("Failed to complete item on an already finalized batch.",
-                new BatchItemMetadata(itemId, msg.MessageId, msg.Metadata.VisibilityTime, FlushPeriod, msg.Metadata.InsertedOn), completedResult.Value);
+                new BatchItemMetadata(itemId.ToString(), msg.MessageId, msg.Metadata.VisibilityTime, FlushPeriod, msg.Metadata.InsertedOn), completedResult.Value);
+        }
 
-        var res = items.TryRemove(itemId, out _);
-        if (!res)
-            throw new ItemNotFoundException(itemId);
+        var remaining = items.Remove(itemId);
 
-        if (!items.IsEmpty)
+        if (remaining > 0)
             return BatchItemCompleteResult.Completed;
 
+        // already processed all items, trigger batch flush
         lock (locker)
         {
             if (!flushTriggered)
@@ -122,10 +125,10 @@ internal class TimerBatch<T>
         return BatchItemCompleteResult.BatchFullyProcessed;
     }
 
-    public IEnumerable<BatchItem<T>> Unpack()
+    public BatchItem<T>[] Unpack()
     {
         timer.Change(FlushPeriod, Timeout.InfiniteTimeSpan);
-        return items.Values.ToArray();
+        return items.Items()!;
     }
 
     /// <summary>
@@ -151,6 +154,38 @@ internal class TimerBatch<T>
 
         throw new ArgumentOutOfRangeException(nameof(visibilityTimeout));
     }
+}
+
+internal class BatchItemsCollection<T>
+{
+    readonly BatchItem<T>?[] items;
+    int remainingCount;
+    readonly object locker = new();
+
+    public BatchItemsCollection(BatchItem<T>[] items)
+    {
+        this.items = items;
+        remainingCount = this.items.Length;
+    }
+
+    public int Remove(BatchItemId id)
+    {
+        lock (locker)
+        {
+            if (items[id.Idx] == null)
+                throw new ItemNotFoundException(id.ToString());
+
+            items[id.Idx] = null;
+            Interlocked.Decrement(ref remainingCount);
+
+            return remainingCount;
+        }
+    }
+
+    public int RemainingCount() => remainingCount;
+
+    public IEnumerable<BatchItem<T>> NotEmptyItems() => items.Where(x => x != null)!;
+    public BatchItem<T>?[] Items() => items;
 }
 
 public class BatchCompletedException : Exception
