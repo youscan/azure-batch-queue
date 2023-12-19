@@ -56,15 +56,6 @@ internal class TimerBatch<T>
         {
             await DoFlush();
         }
-        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
-        {
-            logger.LogWarning(ex, "Queue {queueName} was not found when flushing {messageId} with {itemsCount} items left.",
-                batchQueue.Name, msg.MessageId, items.RemainingCount());
-        }
-        catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
-        {
-            logger.LogError(ex, "Accessing already flushed message with {messageId}.", msg.MessageId);
-        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled exception when flushing message {messageId}.", msg.MessageId);
