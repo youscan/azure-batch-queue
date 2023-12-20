@@ -45,24 +45,36 @@ public class MessageQueue<T>
         await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
 
-    async Task<Payload> Payload(T item, string? blobName = null, CancellationToken ct = default)
+    async Task<Payload> Payload(T item, CancellationToken ct = default)
     {
         var payload = serializer.Serialize(item);
 
         if (payload.Length <= MaxMessageSize)
-            return new Payload(payload, false);
+            return new Payload(payload);
 
+        var blobRef = BlobRef.Create();
+        await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(payload), ct);
+        payload = JsonSerializer.SerializeToUtf8Bytes(blobRef);
+        return new Payload(payload, blobRef.BlobName);
+    }
+
+    async Task<Payload> UpdatedPayload(QueueMessage<T> queueMessage, CancellationToken ct = default)
+    {
+        var payload = serializer.Serialize(queueMessage.Item);
+
+        if (payload.Length <= MaxMessageSize)
+            return new Payload(payload);
+
+        // Updated payload is still not small enough for a QueueMessage, will update the blob contents
+        var blobName = queueMessage.MessageId.BlobName;
         if (blobName == null)
         {
-            var blobRef = BlobRef.Create();
-            await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(payload), ct);
-            payload = JsonSerializer.SerializeToUtf8Bytes(blobRef);
-            return new Payload(payload, true);
+            throw new Exception("Error when serializing updated QueueMessage payload. Payload size cannot increase.");
         }
 
         await container.GetBlobClient(blobName).UploadAsync(new BinaryData(payload), true, ct);
         payload = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
-        return new Payload(payload, true);
+        return new Payload(payload, blobName);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
@@ -74,10 +86,11 @@ public class MessageQueue<T>
 
     public async Task UpdateMessage(QueueMessage<T> msg, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var payload = await Payload(msg.Item, msg.MessageId.BlobName, ct);
+        var payload = await UpdatedPayload(msg, ct);
 
         await queue.UpdateMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, ct);
-        if (msg.MessageId.BlobName != null && !payload.UsingBlob)
+
+        if (msg.MessageId.BlobName != null && payload.BlobName == null)
             await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
     }
 
@@ -148,12 +161,12 @@ public class MessageQueue<T>
     {
         try
         {
-            var payload = await Payload(msg.Item, msg.MessageId.BlobName, ct);
+            var payload = await UpdatedPayload(msg, ct);
 
             await quarantineQueue.SendMessageAsync(new BinaryData(payload.Data), cancellationToken: ct);
             await queue.DeleteMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, ct);
 
-            if (msg.MessageId.BlobName != null && !payload.UsingBlob)
+            if (msg.MessageId.BlobName != null && payload.BlobName == null)
                 await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
         }
         catch (Exception ex)
@@ -223,4 +236,4 @@ public class MessageQueue<T>
 public record QueueMessage<T>(T Item, MessageId MessageId, QueueMessageMetadata Metadata, long DequeueCount = 0);
 public record QueueMessageMetadata(DateTimeOffset VisibilityTime, DateTimeOffset InsertedOn);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
-public record Payload(byte[] Data, bool UsingBlob);
+public record Payload(byte[] Data, string? BlobName = null);
