@@ -60,6 +60,7 @@ public class BatchQueue<T>
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to quarantine message {messageId}.", message.MessageId);
+            throw;
         }
     }
 
