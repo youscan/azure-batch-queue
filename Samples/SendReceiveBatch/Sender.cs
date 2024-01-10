@@ -1,6 +1,6 @@
+using System.Text.Json;
 using AzureBatchQueue;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace SendReceiveBatch;
 
@@ -26,7 +26,7 @@ public class Sender
 
         await batchQueue.Send(words);
 
-        Log($"Sent a batch {JsonConvert.SerializeObject(words)}.");
+        Log($"Sent a batch {JsonSerializer.Serialize(words)}.");
     }
 
     static void Log(string message)

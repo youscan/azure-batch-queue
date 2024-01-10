@@ -1,3 +1,4 @@
+using AzureBatchQueue.Tests.Serializers;
 using FluentAssertions;
 using NUnit.Framework;
 
@@ -110,10 +111,11 @@ public class MessageQueueTests
         message.MessageId.BlobName.Should().NotBeEmpty();
     }
 
-    [Test]
-    public async Task When_using_custom_serializer()
+    [TestCase(typeof(GZipNewtonsoftSerializer<TestItem>))]
+    [TestCase(typeof(GZipJsonSerializer<TestItem>))]
+    public async Task When_using_custom_serializer(Type serializerType)
     {
-        using var queueTest = await Queue(serializer: GZipCompressedSerializer<TestItem>.New());
+        using var queueTest = await Queue(serializer: GetSerializer<TestItem>(serializerType));
 
         var msg = new TestItem("Dimka", 33);
         await queueTest.Queue.Send(msg);
@@ -173,5 +175,19 @@ public class MessageQueueTests
         {
             Queue.Delete().GetAwaiter().GetResult();
         }
+    }
+
+    static IMessageQueueSerializer<T> GetSerializer<T>(Type serializerType)
+    {
+        if (serializerType == typeof(JsonSerializer<T>))
+            return JsonSerializer<T>.New();
+
+        if (serializerType == typeof(GZipJsonSerializer<T>))
+            return GZipJsonSerializer<T>.New();
+
+        if (serializerType == typeof(GZipNewtonsoftSerializer<T>))
+            return GZipNewtonsoftSerializer<T>.New();
+
+        throw new Exception($"Unsupported serializer type {serializerType}");
     }
 }
