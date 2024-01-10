@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Queues;
@@ -187,8 +188,16 @@ public class MessageQueue<T>
         var payload = m.Body.ToMemory();
         if (IsBlobRef(m.Body, out var blobRef))
         {
-            var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
-            payload = blobData.Value.Content.ToMemory();
+            try
+            {
+                var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
+                payload = blobData.Value.Content.ToMemory();
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                logger.LogError(ex, "Blob with name {blobRef!.BlobName} is not found for {messageId}", blobRef.BlobName, m.MessageId);
+                throw;
+            }
         }
 
         var item = serializer.Deserialize(payload);
