@@ -47,23 +47,30 @@ public class MessageQueue<T>
 
     async Task<Payload> Payload(T item, CancellationToken ct = default)
     {
-        var payload = serializer.Serialize(item);
+        using var payload = new MemoryStream();
+        serializer.Serialize(payload, item);
+
+        var data = payload.GetBuffer().AsMemory(0, (int)payload.Position);
 
         if (payload.Length <= MaxMessageSize)
-            return new Payload(payload);
+            return new Payload(data);
 
         var blobRef = BlobRef.Create();
-        await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(payload), ct);
-        payload = JsonSerializer.SerializeToUtf8Bytes(blobRef);
-        return new Payload(payload, blobRef.BlobName);
+        await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(data), ct);
+
+        var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(blobRef);
+        return new Payload(blobRefMsg, blobRef.BlobName);
     }
 
     async Task<Payload> UpdatedPayload(QueueMessage<T> queueMessage, CancellationToken ct = default)
     {
-        var payload = serializer.Serialize(queueMessage.Item);
+        using var payload = new MemoryStream();
+        serializer.Serialize(payload, queueMessage.Item);
+
+        var data = payload.GetBuffer().AsMemory(0, (int)payload.Position);
 
         if (payload.Length <= MaxMessageSize)
-            return new Payload(payload);
+            return new Payload(data);
 
         // Updated payload is still not small enough for a QueueMessage, will update the blob contents
         var blobName = queueMessage.MessageId.BlobName;
@@ -72,9 +79,9 @@ public class MessageQueue<T>
             throw new Exception("Error when serializing updated QueueMessage payload. Payload size cannot increase.");
         }
 
-        await container.GetBlobClient(blobName).UploadAsync(new BinaryData(payload), true, ct);
-        payload = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
-        return new Payload(payload, blobName);
+        await container.GetBlobClient(blobName).UploadAsync(new BinaryData(data), true, ct);
+        var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
+        return new Payload(blobRefMsg, blobName);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
@@ -236,4 +243,4 @@ public class MessageQueue<T>
 public record QueueMessage<T>(T Item, MessageId MessageId, QueueMessageMetadata Metadata, long DequeueCount = 0);
 public record QueueMessageMetadata(DateTimeOffset VisibilityTime, DateTimeOffset InsertedOn);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
-public record Payload(byte[] Data, string? BlobName = null);
+public record Payload(ReadOnlyMemory<byte> Data, string? BlobName = null);
