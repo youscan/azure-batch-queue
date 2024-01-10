@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 using Azure;
 using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Logging;
@@ -21,7 +20,6 @@ public class MessageQueue<T>
     readonly QueueClient queue;
     readonly QueueClient quarantineQueue;
     readonly BlobContainerClient container;
-    readonly BlockBlobClient blobClient;
 
     public MessageQueue(string connectionString, string queueName,
         int maxDequeueCount = 5,
@@ -195,7 +193,7 @@ public class MessageQueue<T>
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                logger.LogError(ex, "Blob with name {blobRef!.BlobName} is not found for {messageId}", blobRef.BlobName, m.MessageId);
+                logger.LogError(ex, "Blob with name {blobRef!.BlobName} is not found for {messageId}", blobRef!.BlobName, m.MessageId);
                 throw;
             }
         }
