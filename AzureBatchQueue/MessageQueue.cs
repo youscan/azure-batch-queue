@@ -49,13 +49,12 @@ public class MessageQueue<T>
         using var payload = new MemoryStream();
         serializer.Serialize(payload, item);
 
-        var data = payload.GetBuffer().AsMemory(0, (int)payload.Position);
-
         if (payload.Length <= MaxMessageSize)
-            return new Payload(data);
+            return new Payload(payload.GetBuffer().AsMemory(0, (int)payload.Position));
 
         var blobRef = BlobRef.Create();
-        await container.UploadBlobAsync(blobRef.BlobName, new BinaryData(data), ct);
+        payload.Position = 0;
+        await container.UploadBlobAsync(blobRef.BlobName, payload, ct);
 
         var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(blobRef);
         return new Payload(blobRefMsg, blobRef.BlobName);
@@ -66,10 +65,8 @@ public class MessageQueue<T>
         using var payload = new MemoryStream();
         serializer.Serialize(payload, queueMessage.Item);
 
-        var data = payload.GetBuffer().AsMemory(0, (int)payload.Position);
-
         if (payload.Length <= MaxMessageSize)
-            return new Payload(data);
+            return new Payload(payload.GetBuffer().AsMemory(0, (int)payload.Position));
 
         // Updated payload is still not small enough for a QueueMessage, will update the blob contents
         var blobName = queueMessage.MessageId.BlobName;
@@ -78,7 +75,8 @@ public class MessageQueue<T>
             throw new Exception("Error when serializing updated QueueMessage payload. Payload size cannot increase.");
         }
 
-        await container.GetBlobClient(blobName).UploadAsync(new BinaryData(data), true, ct);
+        payload.Position = 0;
+        await container.GetBlobClient(blobName).UploadAsync(payload, true, ct);
         var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
         return new Payload(blobRefMsg, blobName);
     }
