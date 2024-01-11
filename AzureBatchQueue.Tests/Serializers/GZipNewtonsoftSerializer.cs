@@ -1,11 +1,14 @@
 using System.IO.Compression;
 using System.Text;
+using Microsoft.IO;
 using Newtonsoft.Json;
 
 namespace AzureBatchQueue.Tests.Serializers;
 
 public class GZipNewtonsoftSerializer<T> : IMessageQueueSerializer<T>
 {
+    public static readonly RecyclableMemoryStreamManager RecyclableMemory = new();
+
     static readonly JsonSerializer serializer = JsonSerializer.Create(new JsonSerializerSettings
     {
         TypeNameHandling = TypeNameHandling.Auto,
@@ -26,7 +29,7 @@ public class GZipNewtonsoftSerializer<T> : IMessageQueueSerializer<T>
 
     public T? Deserialize(ReadOnlyMemory<byte> bytes)
     {
-        var compressedStream = new MemoryStream(bytes.ToArray());
+        using var compressedStream = RecyclableMemory.GetStream(bytes.ToArray());
 
         using var decompressorStream = new GZipStream(compressedStream, CompressionMode.Decompress);
         using var decompressedStream = new MemoryStream();

@@ -7,10 +7,11 @@ namespace AzureBatchQueue.Tests;
 [TestFixture]
 public class MessageQueueTests
 {
-    [Test]
-    public async Task When_sending_large_message()
+    [TestCase(typeof(GZipNewtonsoftSerializer<string>))]
+    [TestCase(typeof(GZipJsonSerializer<string>))]
+    public async Task When_sending_large_message(Type serializerType)
     {
-        using var queueTest = await Queue<string>();
+        using var queueTest = await Queue(serializer: GetSerializer<string>(serializerType));
 
         var largeMessage = new string('*', 65 * 1024);
         await queueTest.Queue.Send(largeMessage);

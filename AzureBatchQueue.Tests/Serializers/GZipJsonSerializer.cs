@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Text.Json;
-using AzureBatchQueue.Utils;
 
 namespace AzureBatchQueue.Tests.Serializers;
 

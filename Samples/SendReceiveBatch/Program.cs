@@ -1,5 +1,4 @@
 ﻿using AzureBatchQueue;
-using AzureBatchQueue.Utils;
 using Microsoft.Extensions.Logging;
 using SendReceiveBatch;
 using Serilog;
