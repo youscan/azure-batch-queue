@@ -191,7 +191,12 @@ public class MessageQueue<T>
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                logger.LogError(ex, "Blob with name {blobRef!.BlobName} is not found for {messageId}", blobRef!.BlobName, m.MessageId);
+                logger.LogError(ex, "Blob with name {BlobName} is not found for {MessageId}", blobRef!.BlobName, m.MessageId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, m.MessageId);
                 throw;
             }
         }
