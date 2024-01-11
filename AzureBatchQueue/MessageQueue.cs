@@ -46,7 +46,7 @@ public class MessageQueue<T>
 
     async Task<Payload> Payload(T item, CancellationToken ct = default)
     {
-        using var payload = new MemoryStream();
+        using var payload = MemoryStreamManager.RecyclableMemory.GetStream("Payload");
         serializer.Serialize(payload, item);
 
         if (payload.Length <= MaxMessageSize)
@@ -62,7 +62,7 @@ public class MessageQueue<T>
 
     async Task<Payload> UpdatedPayload(QueueMessage<T> queueMessage, CancellationToken ct = default)
     {
-        using var payload = new MemoryStream();
+        using var payload = MemoryStreamManager.RecyclableMemory.GetStream("UpdatedPayload");
         serializer.Serialize(payload, queueMessage.Item);
 
         if (payload.Length <= MaxMessageSize)
