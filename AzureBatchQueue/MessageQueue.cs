@@ -146,6 +146,11 @@ public class MessageQueue<T>
 
     public async Task Dequarantine(CancellationToken ct = default)
     {
+        var total = (await quarantineQueue.GetPropertiesAsync(ct)).Value.ApproximateMessagesCount;
+        logger.LogInformation("Quarantine queue has at least {totalQuarantine} messages. Will move them to main queue now.", total);
+
+        var dequarantineAmount = 0;
+
         do
         {
             var response = await quarantineQueue.ReceiveMessagesAsync(MaxMessagesReceive, cancellationToken: ct);
@@ -153,10 +158,29 @@ public class MessageQueue<T>
             if (!response.HasValue || response.Value.Length == 0)
                 return;
 
+            logger.LogInformation("Received {receiveDeqBatch}. Total {dequarantineSoFar} out of {totalQuarantine}.", response.Value.Length, dequarantineAmount, total);
+
             foreach (var msg in response.Value)
             {
+                if (IsBlobRef(msg.Body, out var blobRef))
+                {
+                    try
+                    {
+                        var blobProps = await container.GetBlobClient(blobRef!.BlobName).GetPropertiesAsync(cancellationToken: ct);
+
+                        if (!blobProps.HasValue || blobProps.Value == null)
+                            throw new Exception("Blob contents is empty on dequarantine.");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId} on Dequarantine", blobRef!.BlobName, msg.MessageId);
+                        throw;
+                    }
+                }
+
                 await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
                 await quarantineQueue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
+                dequarantineAmount++;
             }
         } while (!ct.IsCancellationRequested);
     }
