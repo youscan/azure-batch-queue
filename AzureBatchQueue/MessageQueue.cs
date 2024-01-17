@@ -115,7 +115,7 @@ public class MessageQueue<T>
         var response = Task.WhenAll(validMessages.Select(x => ToQueueMessage(x, ct)));
 
         await Task.WhenAll(quarantine, response);
-        return response.Result;
+        return response.Result.Where(x => x != null).ToArray()!;
     }
 
     public async Task<QueueMessage<T>[]> ReceiveFromQuarantine(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
@@ -183,7 +183,7 @@ public class MessageQueue<T>
         }
     }
 
-    async Task<QueueMessage<T>> ToQueueMessage(QueueMessage m, CancellationToken ct)
+    async Task<QueueMessage<T>?> ToQueueMessage(QueueMessage m, CancellationToken ct)
     {
         var payload = m.Body.ToMemory();
         if (IsBlobRef(m.Body, out var blobRef))
@@ -198,6 +198,7 @@ public class MessageQueue<T>
                 logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, m.MessageId);
 
                 await brokenQueue.SendMessageAsync(m.Body, cancellationToken: ct);
+                return null;
             }
         }
 
