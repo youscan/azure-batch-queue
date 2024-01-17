@@ -141,6 +141,7 @@ public class MessageQueue<T>
         {
             logger.LogError(ex, "Failed to quarantine queue message with {messageId} and {popReceipt}.",
                 queueMessage.MessageId, queueMessage.PopReceipt);
+            throw;
         }
     }
 
