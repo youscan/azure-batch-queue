@@ -51,17 +51,9 @@ public class BatchQueue<T>
 
     public async Task QuarantineMessage(QueueMessage<T[]> message)
     {
-        try
-        {
-            await queue.QuarantineMessage(message);
+        await queue.QuarantineMessage(message);
 
-            logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.DequeueCount);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to quarantine message {messageId}.", message.MessageId);
-            throw;
-        }
+        logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.DequeueCount);
     }
 
     public BatchQueue<T> WithLogger(ILogger queueLogger)
