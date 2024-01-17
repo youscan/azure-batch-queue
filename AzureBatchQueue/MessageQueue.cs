@@ -158,7 +158,30 @@ public class MessageQueue<T>
 
             foreach (var msg in response.Value)
             {
-                await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
+                var blobSuccess = false;
+
+                if (IsBlobRef(msg.Body, out var blobRef))
+                {
+                    try
+                    {
+                        await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
+                        blobSuccess = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, msg.MessageId);
+                    }
+                }
+
+                if (blobSuccess)
+                {
+                    await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
+                }
+                else
+                {
+                    await brokenQueue.SendMessageAsync(msg.Body, cancellationToken: ct);
+                }
+
                 await quarantineQueue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
             }
         } while (!ct.IsCancellationRequested);
