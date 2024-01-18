@@ -59,6 +59,7 @@ public class BatchQueue<T>
     public BatchQueue<T> WithLogger(ILogger queueLogger)
     {
         logger = queueLogger;
+        queue.WithLogger(queueLogger);
         return this;
     }
 }
