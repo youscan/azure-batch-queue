@@ -11,7 +11,7 @@ jobs:
         ports:
           - 10000:10000
           - 10001:10001
-        # No simple reciept to curl it, so, let's just wait
+        # No simple receipt to curl it, so let's just wait
         options: >-
           --health-cmd "sleep 5"
           --health-interval 3s
@@ -37,3 +37,13 @@ jobs:
         run: |
           dotnet pack --no-restore --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg -p:PackageVersion=${{ steps.vars.outputs.tag }} -o output/${{ steps.vars.outputs.tag }} AzureBatchQueue/
           dotnet nuget push output/${{ steps.vars.outputs.tag }}/*.nupkg --api-key ${{ secrets.NUGET_API_TOKEN }} --source https://api.nuget.org/v3/index.json
+      - name: Create release
+        if: steps.vars.outputs.tag != null
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            output/${{ steps.vars.outputs.tag }}/*.nupkg
+          generate_release_notes: true
+          # TODO: Determine the prerelease versions using the NuGet convention https://learn.microsoft.com/en-us/nuget/create-packages/prerelease-packages
+          prerelease: false
+          draft: false
