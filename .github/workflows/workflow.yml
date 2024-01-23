@@ -1,9 +1,12 @@
-name: dotnet package
+name: Test and publish
 
-on: [push, pull_request, create]
+on:
+  - push
+  - pull_request
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     services:
       azurite:
@@ -20,14 +23,26 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "7.0.100"
+          dotnet-version: "7"
       - name: Install dependencies
         run: dotnet restore
       - name: Build
         run: dotnet build --configuration Release --no-restore
       - name: Test
         if: ${{ !env.ACT }}
-        run: dotnet test --no-restore --no-build --configuration Release AzureBatchQueue.Tests
+        run: |
+          dotnet test --no-restore --no-build \
+            --configuration Release \
+            --logger trx\;LogFileName=${{ github.workspace }}/TestResults/AzureBatchQueue.Tests.trx \
+            --logger console \
+              AzureBatchQueue.Tests
+      - name: Tests Report
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: "Tests"
+          path: "${{ github.workspace }}/TestResults/*.trx"
+          reporter: "dotnet-trx"
       - name: Get tag name
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         id: vars
