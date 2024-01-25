@@ -39,25 +39,24 @@ public class MessageQueue<T>
 
     public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var payload = await Payload(item, ct: ct);
+        var data = await SerializeAndOffloadIfBig(item, ct);
 
-        await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
+        await queue.SendMessageAsync(new BinaryData(data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
 
-    async Task<Payload> Payload(T item, CancellationToken ct = default)
+    async Task<ReadOnlyMemory<byte>> SerializeAndOffloadIfBig(T item, CancellationToken ct)
     {
-        using var payload = MemoryStreamManager.RecyclableMemory.GetStream("Payload");
-        serializer.Serialize(payload, item);
+        using var stream = MemoryStreamManager.RecyclableMemory.GetStream("QueueMessage");
+        serializer.Serialize(stream, item);
 
-        if (payload.Length <= MaxMessageSize)
-            return new Payload(payload.GetBuffer().AsMemory(0, (int)payload.Position));
+        if (stream.Length <= MaxMessageSize)
+            return stream.GetBuffer().AsMemory(0, (int)stream.Position);
 
         var blobRef = BlobRef.Create();
-        payload.Position = 0;
-        await container.UploadBlobAsync(blobRef.BlobName, payload, ct);
+        stream.Position = 0;
+        await container.UploadBlobAsync(blobRef.BlobName, stream, ct);
 
-        var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(blobRef);
-        return new Payload(blobRefMsg, blobRef.BlobName);
+        return JsonSerializer.SerializeToUtf8Bytes(blobRef);
     }
 
     async Task<Payload> UpdatedPayload(QueueMessage<T> queueMessage, CancellationToken ct = default)
