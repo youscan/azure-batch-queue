@@ -101,7 +101,13 @@ internal class TimerBatch<T>
                     items.Items().Length);
             }
 
-            async Task Delete() => await batchQueue.DeleteMessage(msg.MessageId);
+            async Task Delete()
+            {
+                await batchQueue.DeleteMessage(msg.MessageId);
+
+                logger.LogDebug("Message {msgId} was fully processed with {totalCount} items", msg.MessageId, items.Items().Length);
+            }
+
             async Task Quarantine()
             {
                 var remaining = Remaining();
