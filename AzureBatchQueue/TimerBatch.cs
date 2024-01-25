@@ -90,7 +90,17 @@ internal class TimerBatch<T>
             else
                 await Update();
 
-            async Task Update() => await batchQueue.UpdateMessage(msg.MessageId, Remaining());
+            async Task Update()
+            {
+                var remaining = Remaining();
+                await batchQueue.UpdateMessage(msg.MessageId, remaining);
+                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod}). {remainingCount} items left not completed from {totalCount} total",
+                    FlushPeriod,
+                    msg.MessageId,
+                    remaining,
+                    items.Items().Length);
+            }
+
             async Task Delete() => await batchQueue.DeleteMessage(msg.MessageId);
             async Task Quarantine()
             {
