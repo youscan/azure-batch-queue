@@ -85,7 +85,7 @@ internal class TimerBatch<T>
 
             completedResult = BatchCompletedResult.TriggeredByFlush;
 
-            if (msg.DequeueCount >= maxDequeueCount)
+            if (msg.Metadata.DequeueCount >= maxDequeueCount)
                 await Quarantine();
             else
                 await Update();

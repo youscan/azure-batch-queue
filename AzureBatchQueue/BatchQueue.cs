@@ -53,7 +53,7 @@ public class BatchQueue<T>
     {
         await queue.QuarantineMessage(message);
 
-        logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.DequeueCount);
+        logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.Metadata.DequeueCount);
     }
 
     public BatchQueue<T> WithLogger(ILogger queueLogger)

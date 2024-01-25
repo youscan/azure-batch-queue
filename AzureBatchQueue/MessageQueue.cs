@@ -44,6 +44,13 @@ public class MessageQueue<T>
         await queue.SendMessageAsync(new BinaryData(data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
 
+    public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
+    {
+        await queue.DeleteMessageAsync(id.Id, id.PopReceipt, ct);
+        if (id.BlobName is not null)
+            await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
+    }
+
     async Task<ReadOnlyMemory<byte>> SerializeAndOffloadIfBig(T item, CancellationToken ct)
     {
         using var stream = MemoryStreamManager.RecyclableMemory.GetStream("QueueMessage");
@@ -78,13 +85,6 @@ public class MessageQueue<T>
         await container.GetBlobClient(blobName).UploadAsync(payload, true, ct);
         var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
         return new Payload(blobRefMsg, blobName);
-    }
-
-    public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
-    {
-        await queue.DeleteMessageAsync(id.Id, id.PopReceipt, ct);
-        if (id.BlobName is not null)
-            await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
     }
 
     public async Task UpdateMessage(QueueMessage<T> msg, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
@@ -203,9 +203,9 @@ public class MessageQueue<T>
         }
 
         var item = serializer.Deserialize(payload);
-        var metadata = new QueueMessageMetadata(m.NextVisibleOn!.Value, m.InsertedOn!.Value);
+        var metadata = new QueueMessageMetadata(m.NextVisibleOn!.Value, m.InsertedOn!.Value, m.DequeueCount);
         var messageId = new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName);
-        var msg = new QueueMessage<T>(item, messageId, metadata, m.DequeueCount);
+        var msg = new QueueMessage<T>(item, messageId, metadata);
         return msg;
     }
 
@@ -251,7 +251,7 @@ public class MessageQueue<T>
     }
 }
 
-public record QueueMessage<T>(T Item, MessageId MessageId, QueueMessageMetadata Metadata, long DequeueCount = 0);
-public record QueueMessageMetadata(DateTimeOffset VisibilityTime, DateTimeOffset InsertedOn);
+public record QueueMessage<T>(T Item, MessageId MessageId, QueueMessageMetadata Metadata);
+public record QueueMessageMetadata(DateTimeOffset VisibilityTime, DateTimeOffset InsertedOn, long DequeueCount = 0);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
 public record Payload(ReadOnlyMemory<byte> Data, string? BlobName = null);
