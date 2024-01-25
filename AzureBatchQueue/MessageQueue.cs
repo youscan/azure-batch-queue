@@ -19,7 +19,6 @@ public class MessageQueue<T>
 
     readonly QueueClient queue;
     readonly QueueClient quarantineQueue;
-    readonly QueueClient brokenQueue;
     readonly BlobContainerClient container;
 
     public MessageQueue(string connectionString, string queueName,
@@ -30,7 +29,6 @@ public class MessageQueue<T>
         this.maxDequeueCount = maxDequeueCount;
         queue = new QueueClient(connectionString, queueName, new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         quarantineQueue = new QueueClient(connectionString, $"{queueName}-quarantine", new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-        brokenQueue = new QueueClient(connectionString, $"{queueName}-broken", new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         container = new BlobContainerClient(connectionString, $"overflow-{queueName}");
 
         this.serializer = serializer ?? new JsonSerializer<T>();
@@ -158,30 +156,7 @@ public class MessageQueue<T>
 
             foreach (var msg in response.Value)
             {
-                var blobSuccess = false;
-
-                if (IsBlobRef(msg.Body, out var blobRef))
-                {
-                    try
-                    {
-                        await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
-                        blobSuccess = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, msg.MessageId);
-                    }
-                }
-
-                if (blobSuccess)
-                {
-                    await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
-                }
-                else
-                {
-                    await brokenQueue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
-                }
-
+                await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
                 await quarantineQueue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
             }
         } while (!ct.IsCancellationRequested);
@@ -216,11 +191,14 @@ public class MessageQueue<T>
                 var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
                 payload = blobData.Value.Content.ToMemory();
             }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                logger.LogError(ex, "Blob with name {BlobName} is not found for {MessageId}", blobRef!.BlobName, m.MessageId);
+                throw;
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, m.MessageId);
-
-                await brokenQueue.SendMessageAsync(m.Body, cancellationToken: ct);
                 throw;
             }
         }
@@ -253,15 +231,11 @@ public class MessageQueue<T>
         static string FileName() => $"{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:s}{Guid.NewGuid():N}.json.gzip";
     }
 
-    public async Task Init() => await Task.WhenAll(
-        queue.CreateIfNotExistsAsync(),
-        quarantineQueue.CreateIfNotExistsAsync(),
-        brokenQueue.CreateIfNotExistsAsync(),
-        container.CreateIfNotExistsAsync());
+    public async Task Init() => await Task.WhenAll(queue.CreateIfNotExistsAsync(), quarantineQueue.CreateIfNotExistsAsync(), container.CreateIfNotExistsAsync());
 
     public async Task Delete(bool deleteBlobs = false)
     {
-        var tasks = new List<Task> { queue.DeleteAsync(), quarantineQueue.DeleteAsync(), brokenQueue.DeleteAsync() };
+        var tasks = new List<Task> { queue.DeleteAsync(), quarantineQueue.DeleteAsync() };
 
         if (deleteBlobs)
             tasks.Add(container.DeleteAsync());
