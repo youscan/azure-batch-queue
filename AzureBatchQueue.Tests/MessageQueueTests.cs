@@ -47,8 +47,7 @@ public class MessageQueueTests
         message.Item.Should().Be(item);
 
         var updatedItem = new TestItem("Yaroslav", 26);
-        var updated = new QueueMessage<TestItem>(updatedItem, message.MessageId, message.Metadata);
-        await queueTest.Queue.UpdateMessage(updated);
+        await queueTest.Queue.UpdateMessage(message.MessageId, updatedItem);
 
         message = (await queueTest.Queue.Receive()).Single();
         message.Item.Should().Be(updatedItem);
@@ -68,8 +67,7 @@ public class MessageQueueTests
         blobName.Should().NotBeEmpty();
 
         var updatedItem = new string('-', 65 * 1024);
-        var updated = new QueueMessage<string>(updatedItem, message.MessageId, message.Metadata);
-        await queueTest.Queue.UpdateMessage(updated);
+        await queueTest.Queue.UpdateMessage(message.MessageId, updatedItem);
 
         message = (await queueTest.Queue.Receive()).Single();
         message.Item.Should().Be(updatedItem);
@@ -90,8 +88,7 @@ public class MessageQueueTests
         blobName.Should().NotBeEmpty();
 
         var updatedItem = new string('+', 1 * 1024);
-        var updated = new QueueMessage<string>(updatedItem, message.MessageId, message.Metadata);
-        await queueTest.Queue.UpdateMessage(updated);
+        await queueTest.Queue.UpdateMessage(message.MessageId, updatedItem);
 
         message = (await queueTest.Queue.Receive()).Single();
         message.Item.Should().Be(updatedItem);

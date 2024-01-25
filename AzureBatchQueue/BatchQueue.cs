@@ -47,13 +47,12 @@ public class BatchQueue<T>
     public async Task ClearMessages() => await queue.ClearMessages();
 
     public async Task DeleteMessage(MessageId msgId, CancellationToken ct = default) => await queue.DeleteMessage(msgId, ct);
-    public async Task UpdateMessage(QueueMessage<T[]> message, CancellationToken ct = default) => await queue.UpdateMessage(message, ct: ct);
+    public async Task UpdateMessage(MessageId id, T[] items, CancellationToken ct = default) => await queue.UpdateMessage(id, items, ct: ct);
 
-    public async Task QuarantineMessage(QueueMessage<T[]> message)
+    public async Task QuarantineData(MessageId id, T[] items)
     {
-        await queue.QuarantineMessage(message);
-
-        logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts.", message.MessageId, message.Metadata.DequeueCount);
+        await queue.QuarantineData(items, CancellationToken.None);
+        await queue.DeleteMessage(id);
     }
 
     public BatchQueue<T> WithLogger(ILogger queueLogger)

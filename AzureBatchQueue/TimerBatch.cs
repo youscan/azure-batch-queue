@@ -90,17 +90,24 @@ internal class TimerBatch<T>
             else
                 await Update();
 
-            async Task Update() => await batchQueue.UpdateMessage(Message());
+            async Task Update() => await batchQueue.UpdateMessage(msg.MessageId, Remaining());
             async Task Delete() => await batchQueue.DeleteMessage(msg.MessageId);
-            async Task Quarantine() => await batchQueue.QuarantineMessage(Message());
+            async Task Quarantine()
+            {
+                var remaining = Remaining();
+                await batchQueue.QuarantineData(msg.MessageId, remaining);
+
+                logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts. With {remainingCount} unprocessed from {totalCount} total",
+                    msg.MessageId,
+                    msg.Metadata.DequeueCount,
+                    remaining,
+                    items.Items().Length);
+
+            }
         }
     }
 
-    QueueMessage<T[]> Message()
-    {
-        var notCompletedItems = items.NotEmptyItems().Select(x => x.Item).ToArray();
-        return msg with { Item = notCompletedItems };
-    }
+    T[] Remaining() => items.NotEmptyItems().Select(x => x.Item).ToArray();
 
     public void Complete(BatchItemId itemId)
     {

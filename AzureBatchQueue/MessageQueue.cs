@@ -39,7 +39,7 @@ public class MessageQueue<T>
 
     public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var data = await SerializeAndOffloadIfBig(item, ct);
+        var (data, _) = await SerializeAndOffloadIfBig(item, ct: ct);
 
         await queue.SendMessageAsync(new BinaryData(data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
@@ -51,50 +51,33 @@ public class MessageQueue<T>
             await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
     }
 
-    async Task<ReadOnlyMemory<byte>> SerializeAndOffloadIfBig(T item, CancellationToken ct)
+    public async Task UpdateMessage(MessageId id, T? item, TimeSpan visibilityTimeout = default, CancellationToken ct = default)
+    {
+        if (item == null)
+        {
+            await queue.UpdateMessageAsync(id.Id, id.PopReceipt, (BinaryData?)null, visibilityTimeout, ct);
+            return;
+        }
+
+        var (data, offloaded) = await SerializeAndOffloadIfBig(item, id.BlobName, ct);
+        await queue.UpdateMessageAsync(id.Id, id.PopReceipt, new BinaryData(data), visibilityTimeout, ct);
+        if (!offloaded && id.BlobName != null)
+            await container.DeleteBlobAsync(id.BlobName, cancellationToken: ct);
+    }
+
+    async Task<Payload> SerializeAndOffloadIfBig(T item, string? blobName = null, CancellationToken ct = default)
     {
         using var stream = MemoryStreamManager.RecyclableMemory.GetStream("QueueMessage");
         serializer.Serialize(stream, item);
 
         if (stream.Length <= MaxMessageSize)
-            return stream.GetBuffer().AsMemory(0, (int)stream.Position);
+            return new Payload(stream.GetBuffer().AsMemory(0, (int)stream.Position), false);
 
-        var blobRef = BlobRef.Create();
+        var blobRef = blobName != null ? BlobRef.Get(blobName) : BlobRef.Create();
         stream.Position = 0;
-        await container.UploadBlobAsync(blobRef.BlobName, stream, ct);
+        await container.GetBlobClient(blobRef.BlobName).UploadAsync(stream, overwrite: true, ct);
 
-        return JsonSerializer.SerializeToUtf8Bytes(blobRef);
-    }
-
-    async Task<Payload> UpdatedPayload(QueueMessage<T> queueMessage, CancellationToken ct = default)
-    {
-        using var payload = MemoryStreamManager.RecyclableMemory.GetStream("UpdatedPayload");
-        serializer.Serialize(payload, queueMessage.Item);
-
-        if (payload.Length <= MaxMessageSize)
-            return new Payload(payload.GetBuffer().AsMemory(0, (int)payload.Position));
-
-        // Updated payload is still not small enough for a QueueMessage, will update the blob contents
-        var blobName = queueMessage.MessageId.BlobName;
-        if (blobName == null)
-        {
-            throw new Exception("Error when serializing updated QueueMessage payload. Payload size cannot increase.");
-        }
-
-        payload.Position = 0;
-        await container.GetBlobClient(blobName).UploadAsync(payload, true, ct);
-        var blobRefMsg = JsonSerializer.SerializeToUtf8Bytes(BlobRef.Get(blobName));
-        return new Payload(blobRefMsg, blobName);
-    }
-
-    public async Task UpdateMessage(QueueMessage<T> msg, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
-    {
-        var payload = await UpdatedPayload(msg, ct);
-
-        await queue.UpdateMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, ct);
-
-        if (msg.MessageId.BlobName != null && payload.BlobName == null)
-            await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
+        return new Payload(JsonSerializer.SerializeToUtf8Bytes(blobRef), true);
     }
 
     public async Task<QueueMessage<T>[]> Receive(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
@@ -161,23 +144,11 @@ public class MessageQueue<T>
         } while (!ct.IsCancellationRequested);
     }
 
-    public async Task QuarantineMessage(QueueMessage<T> msg, CancellationToken ct = default)
+    public async Task QuarantineData(T item, CancellationToken ct)
     {
-        try
-        {
-            var payload = await UpdatedPayload(msg, ct);
+        var payload = await SerializeAndOffloadIfBig(item, ct: ct);
 
-            await quarantineQueue.SendMessageAsync(new BinaryData(payload.Data), cancellationToken: ct);
-            await queue.DeleteMessageAsync(msg.MessageId.Id, msg.MessageId.PopReceipt, ct);
-
-            if (msg.MessageId.BlobName != null && payload.BlobName == null)
-                await container.DeleteBlobAsync(msg.MessageId.BlobName, cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to quarantine queue message {msgId}.", msg.MessageId);
-            throw;
-        }
+        await quarantineQueue.SendMessageAsync(new BinaryData(payload.Data), cancellationToken: ct);
     }
 
     async Task<QueueMessage<T>> ToQueueMessage(QueueMessage m, CancellationToken ct)
@@ -254,4 +225,4 @@ public class MessageQueue<T>
 public record QueueMessage<T>(T Item, MessageId MessageId, QueueMessageMetadata Metadata);
 public record QueueMessageMetadata(DateTimeOffset VisibilityTime, DateTimeOffset InsertedOn, long DequeueCount = 0);
 public record MessageId(string Id, string PopReceipt, string? BlobName);
-public record Payload(ReadOnlyMemory<byte> Data, string? BlobName = null);
+public record Payload(ReadOnlyMemory<byte> Data, bool Offloaded);
