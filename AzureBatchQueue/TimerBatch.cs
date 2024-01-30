@@ -94,10 +94,10 @@ internal class TimerBatch<T>
             {
                 var remaining = Remaining();
                 await batchQueue.UpdateMessage(msg.MessageId, remaining);
-                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod}). {remainingCount} items left not completed from {totalCount} total",
-                    FlushPeriod,
+                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod} sec). {remainingCount} items left not completed from {totalCount} total",
                     msg.MessageId,
-                    remaining,
+                    FlushPeriod.Seconds,
+                    remaining.Length,
                     items.Items().Length);
             }
 
