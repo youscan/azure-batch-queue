@@ -96,7 +96,7 @@ internal class TimerBatch<T>
                 await batchQueue.UpdateMessage(msg.MessageId, remaining);
                 logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod} sec). {remainingCount} items left not completed from {totalCount} total",
                     msg.MessageId,
-                    FlushPeriod.Seconds,
+                    FlushPeriod.TotalSeconds,
                     remaining.Length,
                     items.Items().Length);
             }
@@ -118,7 +118,6 @@ internal class TimerBatch<T>
                     msg.Metadata.DequeueCount,
                     remaining,
                     items.Items().Length);
-
             }
         }
     }
