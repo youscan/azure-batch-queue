@@ -94,9 +94,10 @@ internal class TimerBatch<T>
             {
                 var remaining = Remaining();
                 await batchQueue.UpdateMessage(msg.MessageId, remaining);
-                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod} sec). {remainingCount} items left not completed from {totalCount} total",
+                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod}) sec in queue {QueueName}. {remainingCount} items left not completed from {totalCount} total",
                     msg.MessageId,
                     FlushPeriod.TotalSeconds,
+                    batchQueue.Name,
                     remaining.Length,
                     items.Items().Length);
             }
@@ -113,9 +114,11 @@ internal class TimerBatch<T>
                 var remaining = Remaining();
                 await batchQueue.QuarantineData(msg.MessageId, remaining);
 
-                logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts. With {remainingCount} unprocessed from {totalCount} total",
+                logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts in queue {QueueName}." +
+                                      " With {remainingCount} unprocessed from {totalCount} total",
                     msg.MessageId,
                     msg.Metadata.DequeueCount,
+                    batchQueue.Name,
                     remaining,
                     items.Items().Length);
             }
