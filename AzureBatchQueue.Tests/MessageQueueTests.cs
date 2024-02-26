@@ -153,6 +153,18 @@ public class MessageQueueTests
         msgFromQuarantine.MessageId.BlobName.Should().NotBeEmpty();
     }
 
+    [Test]
+    public async Task When_exception_on_deserialize()
+    {
+        var jsonQueue = await Queue(serializer: JsonSerializer<string>.New());
+        var message = new string("test");
+        await jsonQueue.Queue.Send(message);
+
+        using var gZipQueue = await Queue(serializer: GZipJsonSerializer<string>.New());
+
+        Assert.DoesNotThrowAsync(async () => await gZipQueue.Queue.Receive());
+    }
+
     static async Task<QueueTest<T>> Queue<T>(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
     {
         var queue = new QueueTest<T>(maxDequeueCount, serializer);

@@ -95,7 +95,7 @@ public class MessageQueue<T>
         var response = Task.WhenAll(validMessages.Select(x => ToQueueMessage(x, ct)));
 
         await Task.WhenAll(quarantine, response);
-        return response.Result;
+        return response.Result.Where(x => x != null).ToArray()!;
     }
 
     public async Task<QueueMessage<T>[]> ReceiveFromQuarantine(int maxMessages = MaxMessagesReceive, TimeSpan? visibilityTimeout = null,
@@ -106,7 +106,9 @@ public class MessageQueue<T>
         if (!r.HasValue)
             return Array.Empty<QueueMessage<T>>();
 
-        return await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct)));
+        var queueMessages = await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct, fromQuarantine: true)));
+
+        return queueMessages.Where(x => x != null).ToArray()!;
     }
 
     async Task QuarantineMessage(QueueMessage queueMessage, CancellationToken ct = default)
@@ -151,7 +153,7 @@ public class MessageQueue<T>
         await quarantineQueue.SendMessageAsync(new BinaryData(payload.Data), cancellationToken: ct);
     }
 
-    async Task<QueueMessage<T>> ToQueueMessage(QueueMessage m, CancellationToken ct)
+    async Task<QueueMessage<T>?> ToQueueMessage(QueueMessage m, CancellationToken ct, bool fromQuarantine = false)
     {
         var payload = m.Body.ToMemory();
         if (IsBlobRef(m.Body, out var blobRef))
@@ -168,7 +170,21 @@ public class MessageQueue<T>
             }
         }
 
-        var item = serializer.Deserialize(payload);
+        T? item;
+        try
+        {
+            item = serializer.Deserialize(payload);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Exception when deserializing a message {MessageId}", m.MessageId);
+
+            if (!fromQuarantine)
+                await QuarantineMessage(m, ct);
+
+            return null;
+        }
+
         var metadata = new QueueMessageMetadata(m.NextVisibleOn!.Value, m.InsertedOn!.Value, m.DequeueCount);
         var messageId = new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName);
         var msg = new QueueMessage<T>(item, messageId, metadata);
