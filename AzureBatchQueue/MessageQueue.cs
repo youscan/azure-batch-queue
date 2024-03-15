@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
@@ -37,11 +36,14 @@ public class MessageQueue<T>
 
     public string Name => queue.Name;
 
-    public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
+    public async Task Send(T item, TimeSpan? visibilityTimeout = null, bool doubleCheckSerialization = false, CancellationToken ct = default)
     {
-        var (data, _) = await SerializeAndOffloadIfBig(item, ct: ct);
-
+        var (data, offloaded) = await SerializeAndOffloadIfBig(item, ct: ct);
         await queue.SendMessageAsync(new BinaryData(data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
+
+        // Don't ask. Checking our sanity
+        if (!offloaded && doubleCheckSerialization)
+            serializer.Deserialize(data);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
