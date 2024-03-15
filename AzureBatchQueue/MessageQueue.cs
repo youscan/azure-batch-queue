@@ -176,7 +176,7 @@ public class MessageQueue<T>
         T? item;
         try
         {
-            item = serializer.Deserialize(payload);
+            item = serializer.Deserialize(payload)!;
         }
         catch (Exception ex)
         {
