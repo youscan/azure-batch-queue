@@ -12,7 +12,6 @@ namespace AzureBatchQueue;
 public class MessageQueue<T>
 {
     readonly int maxDequeueCount;
-    readonly Action<T, Payload>? onSend;
     ILogger logger;
     readonly IMessageQueueSerializer<T> serializer;
     const int MaxMessageSize = 48 * 1024; // 48 KB
@@ -25,11 +24,9 @@ public class MessageQueue<T>
     public MessageQueue(string connectionString, string queueName,
         int maxDequeueCount = 5,
         IMessageQueueSerializer<T>? serializer = null,
-        ILogger? logger = null,
-        Action<T, Payload>? onSend = null)
+        ILogger? logger = null)
     {
         this.maxDequeueCount = maxDequeueCount;
-        this.onSend = onSend;
         queue = new QueueClient(connectionString, queueName, new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         quarantineQueue = new QueueClient(connectionString, $"{queueName}-quarantine", new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         container = new BlobContainerClient(connectionString, $"overflow-{queueName}");
@@ -42,9 +39,9 @@ public class MessageQueue<T>
 
     public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var payload = await SerializeAndOffloadIfBig(item, ct: ct);
-        await queue.SendMessageAsync(new BinaryData(payload.Data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
-        onSend?.Invoke(item, payload);
+        var (data, _) = await SerializeAndOffloadIfBig(item, ct: ct);
+
+        await queue.SendMessageAsync(new BinaryData(data), visibilityTimeout ?? TimeSpan.Zero, null, ct);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
