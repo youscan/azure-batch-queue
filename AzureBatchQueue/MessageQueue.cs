@@ -74,7 +74,7 @@ public class MessageQueue<T>
         serializer.Serialize(stream, item);
 
         if (stream.Length <= MaxMessageSize)
-            return new Payload(stream.GetBuffer().AsMemory(0, (int)stream.Position), false);
+            return new Payload(stream.GetBuffer().AsMemory(0, (int)stream.Length), false);
 
         var blobRef = blobName != null ? BlobRef.Get(blobName) : BlobRef.Create();
         stream.Position = 0;
