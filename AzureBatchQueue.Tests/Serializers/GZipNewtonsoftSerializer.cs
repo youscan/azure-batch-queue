@@ -30,7 +30,7 @@ public class GZipNewtonsoftSerializer<T> : IMessageQueueSerializer<T>
     public T? Deserialize(ReadOnlySpan<byte> bytes)
     {
         using var stream = RecyclableMemory.GetStream(bytes);
-        using var gZipStream = new GZipStream(stream, CompressionMode.Decompress);
+        using var gZipStream = new GZipStream(stream, CompressionMode.Decompress, true);
         using var jsonReader = new JsonTextReader(new StreamReader(gZipStream, Encoding.UTF8));
         return serializer.Deserialize<T>(jsonReader);
     }
