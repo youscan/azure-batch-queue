@@ -15,9 +15,10 @@ public class GZipJsonSerializer<T> : IMessageQueueSerializer<T>
         gzipStream.Flush();
     }
 
-    public T? Deserialize(ReadOnlyMemory<byte> bytes)
+    public T? Deserialize(ReadOnlySpan<byte> bytes)
     {
-        var json = StringCompression.Decompress(bytes.ToArray());
-        return JsonSerializer.Deserialize<T>(json);
+        using var stream = new MemoryStream(bytes.ToArray());
+        using var decompressorStream = new GZipStream(stream, CompressionMode.Decompress);
+        return JsonSerializer.Deserialize<T>(decompressorStream);
     }
 }

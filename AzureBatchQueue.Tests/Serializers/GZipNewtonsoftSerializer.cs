@@ -27,16 +27,11 @@ public class GZipNewtonsoftSerializer<T> : IMessageQueueSerializer<T>
         jsonWriter.Flush();
     }
 
-    public T? Deserialize(ReadOnlyMemory<byte> bytes)
+    public T? Deserialize(ReadOnlySpan<byte> bytes)
     {
-        using var compressedStream = RecyclableMemory.GetStream(bytes.ToArray());
-
-        using var decompressorStream = new GZipStream(compressedStream, CompressionMode.Decompress);
-        using var decompressedStream = new MemoryStream();
-        decompressorStream.CopyTo(decompressedStream);
-
-        decompressedStream.Position = 0;
-        using var jsonReader = new JsonTextReader(new StreamReader(decompressedStream, Encoding.UTF8));
+        using var stream = RecyclableMemory.GetStream(bytes);
+        using var gZipStream = new GZipStream(stream, CompressionMode.Decompress);
+        using var jsonReader = new JsonTextReader(new StreamReader(gZipStream, Encoding.UTF8));
         return serializer.Deserialize<T>(jsonReader);
     }
 }

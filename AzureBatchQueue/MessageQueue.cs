@@ -43,7 +43,7 @@ public class MessageQueue<T>
 
         // Don't ask. Checking our sanity
         if (!offloaded && doubleCheckSerialization)
-            serializer.Deserialize(data);
+            serializer.Deserialize(data.Span);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
@@ -157,13 +157,13 @@ public class MessageQueue<T>
 
     async Task<QueueMessage<T>?> ToQueueMessage(QueueMessage m, CancellationToken ct, bool fromQuarantine = false)
     {
-        var payload = m.Body.ToMemory();
+        var payload = m.Body;
         if (IsBlobRef(m.Body, out var blobRef))
         {
             try
             {
                 var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
-                payload = blobData.Value.Content.ToMemory();
+                payload = blobData.Value.Content;
             }
             catch (Exception ex)
             {
