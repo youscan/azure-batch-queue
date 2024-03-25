@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SendReceiveBatch", "Samples
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dequarantine", "Samples\Dequarantine\Dequarantine.csproj", "{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureBatchQueue.JsonNet", "AzureBatchQueue.JsonNet\AzureBatchQueue.JsonNet.csproj", "{CF0F7C63-4165-4892-8098-83C8C222382F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +34,10 @@ Global
 		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EC5023C8-EBBF-4613-B72F-A1AEF8CF6D7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF0F7C63-4165-4892-8098-83C8C222382F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF0F7C63-4165-4892-8098-83C8C222382F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF0F7C63-4165-4892-8098-83C8C222382F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF0F7C63-4165-4892-8098-83C8C222382F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7D64E9C9-E0ED-4C80-9E52-1EF0A860545B} = {2B7ECE35-294A-4053-8244-165DBA88A9B1}
