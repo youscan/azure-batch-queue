@@ -25,7 +25,7 @@ public class BatchQueue<T>
 
     public string Name => queue.Name;
 
-    public async Task Send(T[] items) => await queue.Send(items);
+    public async Task Send(T[] items, TimeSpan? visibilityTimeout = null) => await queue.Send(items, visibilityTimeout);
 
     public async Task<BatchItem<T>[]> Receive(int maxMessages = 32, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
