@@ -1,3 +1,4 @@
+using AzureBatchQueue.JsonNet;
 using AzureBatchQueue.Tests.Serializers;
 using FluentAssertions;
 using NUnit.Framework;
@@ -7,7 +8,7 @@ namespace AzureBatchQueue.Tests;
 [TestFixture]
 public class MessageQueueTests
 {
-    [TestCase(typeof(GZipNewtonsoftSerializer<string>))]
+    [TestCase(typeof(BatchQueueCompressedSerializer<string>))]
     [TestCase(typeof(GZipJsonSerializer<string>))]
     public async Task When_sending_large_message(Type serializerType)
     {
@@ -109,7 +110,7 @@ public class MessageQueueTests
         message.MessageId.BlobName.Should().NotBeEmpty();
     }
 
-    [TestCase(typeof(GZipNewtonsoftSerializer<TestItem>))]
+    [TestCase(typeof(BatchQueueCompressedSerializer<TestItem>))]
     [TestCase(typeof(GZipJsonSerializer<TestItem>))]
     public async Task When_using_custom_serializer(Type serializerType)
     {
@@ -195,8 +196,8 @@ public class MessageQueueTests
         if (serializerType == typeof(GZipJsonSerializer<T>))
             return GZipJsonSerializer<T>.New();
 
-        if (serializerType == typeof(GZipNewtonsoftSerializer<T>))
-            return GZipNewtonsoftSerializer<T>.New();
+        if (serializerType == typeof(BatchQueueCompressedSerializer<T>))
+            return new BatchQueueCompressedSerializer<T>();
 
         throw new Exception($"Unsupported serializer type {serializerType}");
     }
