@@ -59,7 +59,7 @@ internal class TimerBatch<T>
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
         {
             logger.LogWarning(ex, "Queue {queueName} was not found when flushing {messageId} with {itemsCount} items left.",
-                batchQueue.Name, msg.MessageId, items.RemainingCount());
+                batchQueue.Name, msg.MessageId, items.NotProcessedCount());
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
@@ -83,7 +83,7 @@ internal class TimerBatch<T>
                 return;
             }
 
-            completedResult = BatchCompletedResult.TriggeredByFlush;
+            completedResult = items.FailedCount() > 0 ? BatchCompletedResult.PartialFailure : BatchCompletedResult.TriggeredByFlush;
 
             if (msg.Metadata.DequeueCount >= maxDequeueCount)
                 await Quarantine();
@@ -94,11 +94,15 @@ internal class TimerBatch<T>
             {
                 var remaining = Remaining();
                 await batchQueue.UpdateMessage(msg.MessageId, remaining);
-                logger.LogWarning("Message {msgId} was not fully processed within a timeout ({FlushPeriod}) sec in queue {QueueName}. {remainingCount} items left not completed from {totalCount} total",
+
+                logger.LogWarning("Message {MsgId} was not fully processed within a timeout ({FlushPeriod}) sec in queue {QueueName}." +
+                                  " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total",
                     msg.MessageId,
                     FlushPeriod.TotalSeconds,
                     batchQueue.Name,
                     remaining.Length,
+                    NotProcessedCount(),
+                    FailedCount(),
                     items.Items().Length);
             }
 
@@ -114,29 +118,52 @@ internal class TimerBatch<T>
                 var remaining = Remaining();
                 await batchQueue.QuarantineData(msg.MessageId, remaining);
 
-                logger.LogInformation("Message {msgId} was quarantined after {dequeueCount} unsuccessful attempts in queue {QueueName}." +
-                                      " With {remainingCount} unprocessed from {totalCount} total",
+                logger.LogInformation("Message {MsgId} was quarantined after {DequeueCount} unsuccessful attempts in queue {QueueName}." +
+                                      " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total",
                     msg.MessageId,
                     msg.Metadata.DequeueCount,
                     batchQueue.Name,
-                    remaining,
+                    remaining.Length,
+                    NotProcessedCount(),
+                    FailedCount(),
                     items.Items().Length);
             }
         }
     }
 
-    T[] Remaining() => items.NotEmptyItems().Select(x => x.Item).ToArray();
+    T[] Remaining() => items.Remaining().Select(x => x.Item).ToArray();
+    int NotProcessedCount() => items.NotProcessedCount();
+    int FailedCount() => items.FailedCount();
 
     public void Complete(BatchItemId itemId)
+    {
+        ThrowIfCompleted(itemId);
+
+        var remaining = items.Complete(itemId);
+
+        FlushIfEmpty(remaining);
+    }
+
+    public void Fail(BatchItemId itemId)
+    {
+        ThrowIfCompleted(itemId);
+
+        var remaining = items.Fail(itemId);
+
+        FlushIfEmpty(remaining);
+    }
+
+    void ThrowIfCompleted(BatchItemId itemId)
     {
         if (completedResult != null)
         {
             throw new BatchCompletedException("Failed to complete item on an already finalized batch.",
                 new BatchItemMetadata(itemId.ToString(), msg.MessageId, msg.Metadata.VisibilityTime, FlushPeriod, msg.Metadata.InsertedOn), completedResult.Value);
         }
+    }
 
-        var remaining = items.Remove(itemId);
-
+    void FlushIfEmpty(int remaining)
+    {
         if (remaining > 0 || flushTriggered)
             return;
 
@@ -181,31 +208,46 @@ internal class TimerBatch<T>
 internal class BatchItemsCollection<T>
 {
     readonly BatchItem<T>?[] items;
-    int remainingCount;
+    readonly List<BatchItem<T>?> failedItems;
+    int notProcessedCount;
 
     public BatchItemsCollection(BatchItem<T>[] items)
     {
         this.items = items;
-        remainingCount = this.items.Length;
+        failedItems = new List<BatchItem<T>?>();
+        notProcessedCount = this.items.Length;
     }
 
-    public int Remove(BatchItemId id)
+    public int Complete(BatchItemId id)
     {
         if (items[id.Idx] == null)
             throw new ItemNotFoundException(id.ToString());
 
         items[id.Idx] = null;
-        return Interlocked.Decrement(ref remainingCount);
+        return Interlocked.Decrement(ref notProcessedCount);
     }
 
-    public int RemainingCount() => remainingCount;
+    public int Fail(BatchItemId id)
+    {
+        if (items[id.Idx] == null)
+            throw new ItemNotFoundException(id.ToString());
 
-    public IEnumerable<BatchItem<T>> NotEmptyItems() => items.Where(x => x != null)!;
+        failedItems.Add(items[id.Idx]);
+        items[id.Idx] = null;
+        return Interlocked.Decrement(ref notProcessedCount);
+    }
+
+    public int NotProcessedCount() => notProcessedCount;
+    public int FailedCount() => failedItems.Count;
+    public int RemainingCount() => notProcessedCount + FailedCount();
+
+    public IEnumerable<BatchItem<T>> Remaining() => failedItems.Concat(items.Where(x => x != null))!;
     public BatchItem<T>?[] Items() => items;
 }
 
 public enum BatchCompletedResult
 {
     FullyProcessed,
-    TriggeredByFlush
+    TriggeredByFlush,
+    PartialFailure
 }
