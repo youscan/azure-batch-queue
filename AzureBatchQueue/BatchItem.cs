@@ -18,6 +18,7 @@ public class BatchItem<T>
 
     public void Complete() => Batch.Complete(Id);
     public void Fail() => Batch.Fail(Id);
+    public void Delay(TimeSpan delay) => Batch.Delay(Id, delay);
 }
 
 public record BatchItemId(string BatchId, int Idx)

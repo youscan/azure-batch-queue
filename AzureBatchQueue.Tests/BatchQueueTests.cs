@@ -101,6 +101,50 @@ public class BatchQueueTests
     }
 
     [Test]
+    public async Task When_batch_updates_with_smallest_visibility_timeout_if_present()
+    {
+        using var queueTest = await Queue<string>();
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var longVisibilityTimeout = TimeSpan.FromSeconds(10);
+        var firstReceive = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        firstReceive.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        foreach (var item in firstReceive)
+        {
+            if (item.Item == "orange")
+            {
+                item.Delay(TimeSpan.FromSeconds(1)); // small delay
+                continue;
+            }
+
+            if (item.Item == "pear")
+            {
+                item.Delay(TimeSpan.FromHours(1)); // huge delay
+                continue;
+            }
+
+            item.Complete();
+        }
+
+        // wait for message to flush
+        await Task.Delay(TimeSpan.FromMilliseconds(10));
+
+        // try to complete batch item again, but catch an exception that everything was already processed
+        Assert.Throws<BatchCompletedException>(() => firstReceive.First().Complete())!
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.PartialFailure);
+
+        // wait for message to be visible after smallest delay time
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
+
+        // message was updated with delayed items
+        var secondReceive = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        secondReceive.Select(x => x.Item).Should().BeEquivalentTo("orange", "pear");
+    }
+
+    [Test]
     public async Task When_batch_flushes_after_all_complete_or_fail()
     {
         using var queueTest = await Queue<string>();
