@@ -17,6 +17,7 @@ public class BatchItem<T>
     public BatchItemMetadata Metadata { get; }
 
     public void Complete() => Batch.Complete(Id);
+    public void Fail() => Batch.Fail(Id);
 }
 
 public record BatchItemId(string BatchId, int Idx)

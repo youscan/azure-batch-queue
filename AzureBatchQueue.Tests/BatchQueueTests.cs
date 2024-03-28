@@ -71,6 +71,72 @@ public class BatchQueueTests
     }
 
     [Test]
+    public async Task When_batch_updates_after_all_fail()
+    {
+        using var queueTest = await Queue<string>();
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var longVisibilityTimeout = TimeSpan.FromSeconds(10);
+        var firstReceive = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        firstReceive.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        foreach (var item in firstReceive)
+            item.Fail();
+
+        // wait for message to flush
+        await Task.Delay(TimeSpan.FromMilliseconds(10));
+
+        // try to complete batch item again, but catch an exception that everything was already processed
+        Assert.Throws<BatchCompletedException>(() => firstReceive.First().Complete())!
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.PartialFailure);
+
+        // wait for message to be visible
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+
+        // message was updated with failed items
+        var secondReceive = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        secondReceive.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+    }
+
+    [Test]
+    public async Task When_batch_flushes_after_all_complete_or_fail()
+    {
+        using var queueTest = await Queue<string>();
+
+        var messageBatch = new[] { "orange", "banana", "apple", "pear", "strawberry" };
+        await queueTest.BatchQueue.Send(messageBatch);
+
+        var longVisibilityTimeout = TimeSpan.FromSeconds(10);
+        var response = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
+
+        var failedItems = new[] { "orange", "apple" };
+        foreach (var item in response)
+        {
+            if (failedItems.Contains(item.Item))
+                item.Fail();
+            else
+                item.Complete();
+        }
+
+        // wait for message to flush
+        await Task.Delay(TimeSpan.FromMilliseconds(10));
+
+        // try to complete batch item again, but catch an exception that everything was already processed
+        Assert.Throws<BatchCompletedException>(() => response.First().Complete())!
+            .BatchCompletedResult.Should().Be(BatchCompletedResult.PartialFailure);
+
+        // wait for message to be visible
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+
+        // message was updated with failed items
+        var secondReceive = await queueTest.BatchQueue.Receive(visibilityTimeout: longVisibilityTimeout);
+        secondReceive.Select(x => x.Item).Should().BeEquivalentTo(failedItems);
+    }
+
+    [Test]
     public async Task When_many_threads_complete_in_parallel()
     {
         using var queueTest = await Queue<string>();
@@ -119,20 +185,24 @@ public class BatchQueueTests
         var response = await queueTest.BatchQueue.Receive(visibilityTimeout: visibilityTimeout);
         response.Select(x => x.Item).Should().BeEquivalentTo(messageBatch);
 
-        const string failedItem = "orange";
+        const string notCompletedItem = "orange";
+        const string failedItem = "pear";
         foreach (var item in response)
         {
-            if (item.Item == failedItem)
+            if (item.Item == notCompletedItem)
                 continue;
 
-            item.Complete();
+            if (item.Item == failedItem)
+                item.Fail();
+            else
+                item.Complete();
         }
 
         // wait for message to be quarantined
         await Task.Delay(visibilityTimeout);
 
         var responseFromQuarantine = await queueTest.BatchQueue.GetItemsFromQuarantine();
-        responseFromQuarantine.Should().BeEquivalentTo(failedItem);
+        responseFromQuarantine.Should().BeEquivalentTo(notCompletedItem, failedItem);
     }
 
     [Test]
