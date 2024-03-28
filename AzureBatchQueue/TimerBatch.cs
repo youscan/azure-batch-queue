@@ -17,7 +17,6 @@ internal class TimerBatch<T>
 
     bool flushTriggered;
     readonly object locker = new();
-    TimeSpan minVisibilityTimeout;
 
     public TimerBatch(BatchQueue<T> batchQueue, QueueMessage<T[]> msg, int maxDequeueCount, ILogger logger)
     {
@@ -94,19 +93,17 @@ internal class TimerBatch<T>
             async Task Update()
             {
                 var remaining = Remaining();
-                await batchQueue.UpdateMessage(msg.MessageId, remaining, visibilityTimeout: minVisibilityTimeout);
+                await batchQueue.UpdateMessage(msg.MessageId, remaining);
 
                 logger.LogWarning("Message {MsgId} was not fully processed within a timeout ({FlushPeriod}) sec in queue {QueueName}." +
-                                  " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total." +
-                                   " VisibilityTimeout for updated message is {VisibilityTimeout}",
+                                  " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total",
                     msg.MessageId,
                     FlushPeriod.TotalSeconds,
                     batchQueue.Name,
                     remaining.Length,
                     NotProcessedCount(),
                     FailedCount(),
-                    items.Items().Length,
-                    minVisibilityTimeout);
+                    items.Items().Length);
             }
 
             async Task Delete()
@@ -152,18 +149,6 @@ internal class TimerBatch<T>
         ThrowIfCompleted(itemId);
 
         var remaining = items.Fail(itemId);
-
-        FlushIfEmpty(remaining);
-    }
-
-    public void Delay(BatchItemId itemId, TimeSpan delayTime)
-    {
-        ThrowIfCompleted(itemId);
-
-        var remaining = items.Fail(itemId);
-
-        if (minVisibilityTimeout == default || minVisibilityTimeout > delayTime)
-            minVisibilityTimeout = delayTime;
 
         FlushIfEmpty(remaining);
     }

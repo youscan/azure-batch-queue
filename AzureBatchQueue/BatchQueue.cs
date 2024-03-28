@@ -47,7 +47,7 @@ public class BatchQueue<T>
     public async Task ClearMessages() => await queue.ClearMessages();
 
     public async Task DeleteMessage(MessageId msgId, CancellationToken ct = default) => await queue.DeleteMessage(msgId, ct);
-    public async Task UpdateMessage(MessageId id, T[] items, TimeSpan visibilityTimeout = default, CancellationToken ct = default) => await queue.UpdateMessage(id, items, visibilityTimeout, ct: ct);
+    public async Task UpdateMessage(MessageId id, T[] items, CancellationToken ct = default) => await queue.UpdateMessage(id, items, ct: ct);
 
     public async Task QuarantineData(MessageId id, T[] items)
     {
