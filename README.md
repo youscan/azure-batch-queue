@@ -21,7 +21,7 @@ Processing one message involves three billed operations: write, read, and comple
 
 So now, when you send a queue message with 50 items, you pay just for 3 operations instead of 150 operations (50 writes, reads, completes).
 
-Features
+## Features
 - The semantics are close to the original `Azure.Storage.Queues` implementation, and is intended to be a drop-in replacement as much as possible.
 - Ensures at-least-one delivery of every record, even in the event of system failures;
 - Minimizes duplicate processing;
