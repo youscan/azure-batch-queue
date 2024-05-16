@@ -4,7 +4,7 @@ Azure Batch Queue is an open-source library designed to optimize Azure Queue ope
 [![CI](https://github.com/youscan/azure-batch-queue/actions/workflows/workflow.yml/badge.svg)](https://github.com/youscan/azure-batch-queue/actions/workflows/workflow.yml) [![NuGet](https://img.shields.io/nuget/v/AzureBatchQueue.svg?style=flat)](https://www.nuget.org/packages/AzureBatchQueue/)
 
 ## Get Started
-Install the latest version from NuGet:
+Install the latest version from [NuGet](https://www.nuget.org/packages/AzureBatchQueue):
 ```
 dotnet add package AzureBatchQueue
 ```
@@ -14,8 +14,15 @@ If you prefer Newtonsoft.Json serialization instead of default System.Text.Json,
 dotnet add package AzureBatchQueue.JsonNet
 ```
 
-## Key Features
-- Combines multiple items into a single queue message, reducing the number of write, read, and complete operations;
+## Purpose
+Processing one message involves three billed operations: write, read, and complete.
+
+> Batching multiple items together and sending them in one message reduces the number of operations (and costs) proportionally.
+
+So now, when you send a queue message with 50 items, you pay just for 3 operations instead of 150 operations (50 writes, reads, completes).
+
+Features
+- The semantics are close to the original `Azure.Storage.Queues` implementation, and is intended to be a drop-in replacement as much as possible.
 - Ensures at-least-one delivery of every record, even in the event of system failures;
 - Minimizes duplicate processing;
 - Handles large messages by offloading content to Azure Blob and sending only a reference through the queue;
