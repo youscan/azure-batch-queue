@@ -43,7 +43,7 @@ jobs:
               AzureBatchQueue.Tests
       - name: Tests Report
         if: success() || failure()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: "Tests"
           path: "${{ github.workspace }}/TestResults/*.trx"
