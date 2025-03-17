@@ -14,4 +14,11 @@
       <ProjectReference Include="..\AzureBatchQueue\AzureBatchQueue.csproj" />
     </ItemGroup>
 
+  <PropertyGroup>
+    <PackageId>AzureBatchQueue.JsonNet</PackageId>
+    <Version>1.0.1</Version>
+    <Authors>YouScan</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
 </Project>

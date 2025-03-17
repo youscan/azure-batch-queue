@@ -13,4 +13,11 @@
       <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.0" />
     </ItemGroup>
 
+  <PropertyGroup>
+    <PackageId>AzureBatchQueue</PackageId>
+    <Version>1.0.1</Version>
+    <Authors>YouScan</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
 </Project>
