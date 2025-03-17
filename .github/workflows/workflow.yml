@@ -4,6 +4,11 @@ on:
   - push
   - pull_request
 
+permissions:
+  id-token: write
+  contents: read
+  checks: write
+
 jobs:
   build:
     name: Build
