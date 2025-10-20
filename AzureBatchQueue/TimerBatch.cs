@@ -208,40 +208,61 @@ internal class TimerBatch<T>
 internal class BatchItemsCollection<T>
 {
     readonly BatchItem<T>?[] items;
-    readonly List<BatchItem<T>?> failedItems;
+    readonly List<BatchItem<T>> failedItems;
+    readonly object syncLock = new();
     int notProcessedCount;
 
     public BatchItemsCollection(BatchItem<T>[] items)
     {
         this.items = items;
-        failedItems = new List<BatchItem<T>?>();
+        failedItems = new List<BatchItem<T>>();
         notProcessedCount = this.items.Length;
     }
 
     public int Complete(BatchItemId id)
     {
-        if (items[id.Idx] == null)
-            throw new ItemNotFoundException(id.ToString());
+        lock (syncLock)
+        {
+            var item = items[id.Idx];
+            if (item == null)
+                throw new ItemNotFoundException(id.ToString());
 
-        items[id.Idx] = null;
-        return Interlocked.Decrement(ref notProcessedCount);
+            items[id.Idx] = null;
+            return Interlocked.Decrement(ref notProcessedCount);
+        }
     }
 
     public int Fail(BatchItemId id)
     {
-        if (items[id.Idx] == null)
-            throw new ItemNotFoundException(id.ToString());
+        lock (syncLock)
+        {
+            var item = items[id.Idx];
+            if (item == null)
+                throw new ItemNotFoundException(id.ToString());
 
-        failedItems.Add(items[id.Idx]);
-        items[id.Idx] = null;
-        return Interlocked.Decrement(ref notProcessedCount);
+            failedItems.Add(item);
+            items[id.Idx] = null;
+            return Interlocked.Decrement(ref notProcessedCount);
+        }
     }
 
     public int NotProcessedCount() => notProcessedCount;
-    public int FailedCount() => failedItems.Count;
+    public int FailedCount()
+    {
+        lock (syncLock)
+        {
+            return failedItems.Count;
+        }
+    }
     public int RemainingCount() => notProcessedCount + FailedCount();
 
-    public IEnumerable<BatchItem<T>> Remaining() => failedItems.Concat(items.Where(x => x != null))!;
+    public IEnumerable<BatchItem<T>> Remaining()
+    {
+        lock (syncLock)
+        {
+            return failedItems.Concat(items.Where(x => x != null)!).ToArray();
+        }
+    }
     public BatchItem<T>?[] Items() => items;
 }
 
