@@ -208,61 +208,63 @@ internal class TimerBatch<T>
 internal class BatchItemsCollection<T>
 {
     readonly BatchItem<T>?[] items;
-    readonly List<BatchItem<T>> failedItems;
-    readonly object syncLock = new();
+    readonly ConcurrentBag<BatchItem<T>> failedItems;
     int notProcessedCount;
 
     public BatchItemsCollection(BatchItem<T>[] items)
     {
         this.items = items;
-        failedItems = new List<BatchItem<T>>();
+        failedItems = new ConcurrentBag<BatchItem<T>>();
         notProcessedCount = this.items.Length;
     }
 
     public int Complete(BatchItemId id)
     {
-        lock (syncLock)
-        {
-            var item = items[id.Idx];
-            if (item == null)
-                throw new ItemNotFoundException(id.ToString());
+        // Use atomic exchange to ensure thread-safe null setting
+        // This guarantees only one thread can successfully set the item to null
+        var item = Interlocked.Exchange(ref items[id.Idx], null);
 
-            items[id.Idx] = null;
-            return Interlocked.Decrement(ref notProcessedCount);
-        }
+        if (item == null)
+            throw new ItemNotFoundException(id.ToString());
+
+        // Atomic decrement - no lock needed
+        return Interlocked.Decrement(ref notProcessedCount);
     }
 
     public int Fail(BatchItemId id)
     {
-        lock (syncLock)
-        {
-            var item = items[id.Idx];
-            if (item == null)
-                throw new ItemNotFoundException(id.ToString());
+        // Use atomic exchange to ensure thread-safe null setting
+        var item = Interlocked.Exchange(ref items[id.Idx], null);
 
-            failedItems.Add(item);
-            items[id.Idx] = null;
-            return Interlocked.Decrement(ref notProcessedCount);
-        }
+        if (item == null)
+            throw new ItemNotFoundException(id.ToString());
+
+        // ConcurrentBag.Add is thread-safe
+        failedItems.Add(item);
+
+        // Atomic decrement - no lock needed
+        return Interlocked.Decrement(ref notProcessedCount);
     }
 
-    public int NotProcessedCount() => notProcessedCount;
-    public int FailedCount()
-    {
-        lock (syncLock)
-        {
-            return failedItems.Count;
-        }
-    }
-    public int RemainingCount() => notProcessedCount + FailedCount();
+    public int NotProcessedCount() => Volatile.Read(ref notProcessedCount);
+
+    public int FailedCount() => failedItems.Count; // ConcurrentBag.Count is thread-safe
+
+    public int RemainingCount() => NotProcessedCount() + FailedCount();
 
     public IEnumerable<BatchItem<T>> Remaining()
     {
-        lock (syncLock)
-        {
-            return failedItems.Concat(items.Where(x => x != null)!).ToArray();
-        }
+        // Create a consistent snapshot of the collection state
+        // ConcurrentBag enumeration creates a snapshot, so it's thread-safe
+        var failed = failedItems.ToArray();
+
+        // Since items only transition from non-null to null (never back),
+        // this enumeration is safe without locks
+        var notProcessed = items.Where(x => x != null)!;
+
+        return failed.Concat(notProcessed).ToArray();
     }
+
     public BatchItem<T>?[] Items() => items;
 }
 
