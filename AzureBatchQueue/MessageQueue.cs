@@ -110,11 +110,12 @@ public class MessageQueue<T>
 
     async Task QuarantineMessage(QueueMessage queueMessage, CancellationToken ct = default)
     {
+        BlobRef? blobRef = null;
         try
         {
             BinaryData messageBody;
 
-            if (IsBlobRef(queueMessage.Body, out var blobRef) && blobRef != null)
+            if (IsBlobRef(queueMessage.Body, out blobRef) && blobRef != null)
             {
                 var newBlobRef = await CopyBlobForQuarantine(blobRef, queueMessage.MessageId, ct);
                 messageBody = Payload.OffloadedToBlob(newBlobRef).Data;
@@ -134,8 +135,8 @@ public class MessageQueue<T>
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to quarantine queue message with {messageId} and {popReceipt}.",
-                queueMessage.MessageId, queueMessage.PopReceipt);
+            logger.LogError(ex, "Failed to quarantine queue message with {messageId}, {popReceipt}, and {blobName}.",
+                queueMessage.MessageId, queueMessage.PopReceipt, blobRef?.BlobName);
             throw;
         }
     }
