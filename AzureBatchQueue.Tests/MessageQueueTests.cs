@@ -10,6 +10,7 @@ public class MessageQueueTests
 {
     [TestCase(typeof(BatchQueueCompressedSerializer<string>))]
     [TestCase(typeof(GZipJsonSerializer<string>))]
+    [TestCase(typeof(NewtonsoftJsonSerializer<string>))]
     public async Task When_sending_large_message(Type serializerType)
     {
         using var queueTest = await Queue(serializer: GetSerializer<string>(serializerType));
@@ -112,6 +113,7 @@ public class MessageQueueTests
 
     [TestCase(typeof(BatchQueueCompressedSerializer<TestItem>))]
     [TestCase(typeof(GZipJsonSerializer<TestItem>))]
+    [TestCase(typeof(NewtonsoftJsonSerializer<TestItem>))]
     public async Task When_using_custom_serializer(Type serializerType)
     {
         using var queueTest = await Queue(serializer: GetSerializer<TestItem>(serializerType));
@@ -198,6 +200,9 @@ public class MessageQueueTests
 
         if (serializerType == typeof(BatchQueueCompressedSerializer<T>))
             return new BatchQueueCompressedSerializer<T>();
+
+        if (serializerType == typeof(NewtonsoftJsonSerializer<T>))
+            return new NewtonsoftJsonSerializer<T>();
 
         throw new Exception($"Unsupported serializer type {serializerType}");
     }

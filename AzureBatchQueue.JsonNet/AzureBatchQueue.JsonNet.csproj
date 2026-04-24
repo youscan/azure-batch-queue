@@ -16,7 +16,7 @@
 
   <PropertyGroup>
     <PackageId>AzureBatchQueue.JsonNet</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Authors>YouScan</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
