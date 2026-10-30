@@ -358,7 +358,7 @@ public class MessageQueueTests
 
         public QueueTest(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
         {
-            var connection = Environment.GetEnvironmentVariable("AZURE_BATCH_QUEUE_TEST_CONNECTION") ?? "UseDevelopmentStorage=true";
+            const string connection = "UseDevelopmentStorage=true";
             Queue = new MessageQueue<T>(connection, "test", maxDequeueCount: maxDequeueCount, serializer: serializer);
             var options = new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 };
             RawQueue = new QueueClient(connection, "test", options);
