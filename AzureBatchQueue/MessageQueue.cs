@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
@@ -117,7 +118,10 @@ public class MessageQueue<T>
 
             if (IsBlobRef(queueMessage.Body, out blobRef) && blobRef != null)
             {
-                var newBlobRef = await CopyBlobForQuarantine(blobRef, queueMessage.MessageId, ct);
+                var newBlobRef = await TryCopyBlobForQuarantine(blobRef, queueMessage, ct);
+                if (newBlobRef == null)
+                    return;
+
                 messageBody = Payload.OffloadedToBlob(newBlobRef).Data;
             }
             else
@@ -145,17 +149,26 @@ public class MessageQueue<T>
     // In this case, later we will insert a duplicate message to quarantine, with the same ref to blob.
     // When one message is processed, we remove the blob. The other message will have a BlobNotFound error.
     // So it's better to do some more heavy-lifting and copy blob content on quarantine.
-    async Task<BlobRef> CopyBlobForQuarantine(BlobRef sourceBlobRef, string messageId, CancellationToken ct)
+    async Task<BlobRef?> TryCopyBlobForQuarantine(BlobRef sourceBlobRef, QueueMessage message, CancellationToken ct)
     {
         var sourceBlobClient = container.GetBlobClient(sourceBlobRef.BlobName);
         var newBlobRef = BlobRef.Create();
         var destinationBlobClient = container.GetBlobClient(newBlobRef.BlobName);
 
-        var content = await sourceBlobClient.DownloadContentAsync(ct);
-        await destinationBlobClient.UploadAsync(content.Value.Content, ct);
+        BinaryData content;
+        try
+        {
+            content = (await sourceBlobClient.DownloadContentAsync(ct)).Value.Content;
+        }
+        catch (RequestFailedException ex) when (ex is { Status: 404, ErrorCode: "BlobNotFound" })
+        {
+            await DeleteMissingBlobMessage(message, sourceBlobRef, ex, ct);
+            return null;
+        }
+        await destinationBlobClient.UploadAsync(content, ct);
 
         logger.LogInformation("Copied blob {SourceBlob} to {DestBlob} for quarantine message {MsgId}",
-            sourceBlobRef.BlobName, newBlobRef.BlobName, messageId);
+            sourceBlobRef.BlobName, newBlobRef.BlobName, message.MessageId);
 
         return newBlobRef;
     }
@@ -193,6 +206,11 @@ public class MessageQueue<T>
                 var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
                 payload = blobData.Value.Content;
             }
+            catch (RequestFailedException ex) when (!fromQuarantine && ex is { Status: 404, ErrorCode: "BlobNotFound" })
+            {
+                await DeleteMissingBlobMessage(m, blobRef!, ex, ct);
+                return null;
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, m.MessageId);
@@ -219,6 +237,14 @@ public class MessageQueue<T>
         var messageId = new MessageId(m.MessageId, m.PopReceipt, blobRef?.BlobName);
         var msg = new QueueMessage<T>(item, messageId, metadata);
         return msg;
+    }
+
+    async Task DeleteMissingBlobMessage(QueueMessage message, BlobRef blobRef, RequestFailedException error, CancellationToken ct)
+    {
+        await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, ct);
+
+        logger.LogWarning(error, "Deleted message {MessageId} from queue {QueueName} because blob {BlobName} was not found.",
+            message.MessageId, queue.Name, blobRef.BlobName);
     }
 
     static bool IsBlobRef(BinaryData data, out BlobRef? o)
