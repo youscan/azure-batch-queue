@@ -295,7 +295,8 @@ public class BatchQueueTests
             var logger = loggerFactory.CreateLogger<BatchQueueTest<T>>();
 
             var random = new Random().NextInt64(0, int.MaxValue);
-            BatchQueue = new BatchQueue<T>("UseDevelopmentStorage=true", $"batch-test-{random}", maxDequeueCount, logger: logger);
+            var connection = Environment.GetEnvironmentVariable("AZURE_BATCH_QUEUE_TEST_CONNECTION") ?? "UseDevelopmentStorage=true";
+            BatchQueue = new BatchQueue<T>(connection, $"batch-test-{random}", maxDequeueCount, logger: logger);
             await BatchQueue.Init();
         }
 

@@ -38,29 +38,36 @@ public class MessageQueue<T>
 
     public async Task Send(T item, TimeSpan? visibilityTimeout = null, CancellationToken ct = default)
     {
-        var (data, _) = await SerializeAndOffloadIfBig(item, ct: ct);
-        await queue.SendMessageAsync(data, visibilityTimeout ?? TimeSpan.Zero, null, ct);
+        var payload = await SerializeAndOffloadIfBig(item, ct: ct);
+        await SendPayload(queue, payload.Data, payload.BlobName, ct, visibilityTimeout ?? TimeSpan.Zero);
     }
 
     public async Task DeleteMessage(MessageId id, CancellationToken ct = default)
     {
-        await queue.DeleteMessageAsync(id.Id, id.PopReceipt, ct);
+        await DeleteQueueMessage(queue, id, ct);
         if (id.BlobName is not null)
-            await container.DeleteBlobIfExistsAsync(id.BlobName, cancellationToken: ct);
+            await DeleteBlob(id, ct);
     }
 
     public async Task UpdateMessage(MessageId id, T? item, TimeSpan visibilityTimeout = default, CancellationToken ct = default)
     {
+        logger.UpdatingMessage(id.Id, queue.Name, id.BlobName);
         if (item == null)
         {
             await queue.UpdateMessageAsync(id.Id, id.PopReceipt, (BinaryData?)null, visibilityTimeout, ct);
+            logger.MessageUpdated(id.Id, queue.Name, id.BlobName, id.BlobName);
             return;
         }
 
-        var (data, offloaded) = await SerializeAndOffloadIfBig(item, id.BlobName, ct);
-        await queue.UpdateMessageAsync(id.Id, id.PopReceipt, data, visibilityTimeout, ct);
-        if (!offloaded && id.BlobName != null)
-            await container.DeleteBlobAsync(id.BlobName, cancellationToken: ct);
+        var payload = await SerializeAndOffloadIfBig(item, id.BlobName, ct);
+        await queue.UpdateMessageAsync(id.Id, id.PopReceipt, payload.Data, visibilityTimeout, ct);
+        logger.MessageUpdated(id.Id, queue.Name, payload.BlobName, id.BlobName);
+        if (!payload.Offloaded && id.BlobName != null)
+        {
+            logger.DeletingBlob(id.BlobName, id.Id, queue.Name);
+            var deleted = await container.DeleteBlobAsync(id.BlobName, cancellationToken: ct);
+            logger.BlobDeleted(id.BlobName, id.Id, queue.Name, true, deleted.Headers.RequestId);
+        }
     }
 
     async Task<Payload> SerializeAndOffloadIfBig(T item, string? blobName = null, CancellationToken ct = default)
@@ -74,7 +81,9 @@ public class MessageQueue<T>
             return Payload.FitsInMessage(stream);
 
         var blobRef = blobName != null ? BlobRef.Get(blobName) : BlobRef.Create();
-        await container.GetBlobClient(blobRef.BlobName).UploadAsync(stream, overwrite: true, ct);
+        logger.UploadingBlob(blobRef.BlobName, queue.Name, stream.Length);
+        var uploaded = await container.GetBlobClient(blobRef.BlobName).UploadAsync(stream, overwrite: true, ct);
+        logger.BlobUploaded(blobRef.BlobName, queue.Name, uploaded.Value.ETag.ToString(), uploaded.GetRawResponse().Headers.RequestId);
         return Payload.OffloadedToBlob(blobRef);
     }
 
@@ -86,6 +95,7 @@ public class MessageQueue<T>
         if (!r.HasValue)
             return Array.Empty<QueueMessage<T>>();
 
+        LogReceivedMessages(queue, r.Value);
         var quarantineMessages = r.Value.Where(x => x.DequeueCount > maxDequeueCount).ToList();
         var validMessages = r.Value.Except(quarantineMessages);
 
@@ -104,6 +114,7 @@ public class MessageQueue<T>
         if (!r.HasValue)
             return Array.Empty<QueueMessage<T>>();
 
+        LogReceivedMessages(quarantineQueue, r.Value);
         var queueMessages = await Task.WhenAll(r.Value.Select(x => ToQueueMessage(x, ct, fromQuarantine: true)));
 
         return queueMessages.Where(x => x != null).ToArray()!;
@@ -115,6 +126,7 @@ public class MessageQueue<T>
         try
         {
             BinaryData messageBody;
+            string? quarantineBlobName = null;
 
             if (IsBlobRef(queueMessage.Body, out blobRef) && blobRef != null)
             {
@@ -123,24 +135,23 @@ public class MessageQueue<T>
                     return;
 
                 messageBody = Payload.OffloadedToBlob(newBlobRef).Data;
+                quarantineBlobName = newBlobRef.BlobName;
             }
             else
             {
                 messageBody = queueMessage.Body;
             }
 
-            await quarantineQueue.SendMessageAsync(messageBody, cancellationToken: ct);
+            await SendPayload(quarantineQueue, messageBody, quarantineBlobName, ct);
 
             var messageId = new MessageId(queueMessage.MessageId, queueMessage.PopReceipt, blobRef?.BlobName);
             await DeleteMessage(messageId, ct);
 
-            logger.LogInformation("QueueMessage {msgId} with {popReceipt} was quarantined after {dequeueCount} unsuccessful attempts.",
-                queueMessage.MessageId, queueMessage.PopReceipt, queueMessage.DequeueCount);
+            logger.MessageQuarantined(queueMessage.MessageId, queueMessage.PopReceipt, queueMessage.DequeueCount);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to quarantine queue message with {messageId}, {popReceipt}, and {blobName}.",
-                queueMessage.MessageId, queueMessage.PopReceipt, blobRef?.BlobName);
+            logger.QuarantineFailed(queueMessage.MessageId, queueMessage.PopReceipt, blobRef?.BlobName, ex);
         }
     }
 
@@ -158,17 +169,21 @@ public class MessageQueue<T>
         BinaryData content;
         try
         {
-            content = (await sourceBlobClient.DownloadContentAsync(ct)).Value.Content;
+            var downloaded = await sourceBlobClient.DownloadContentAsync(ct);
+            content = downloaded.Value.Content;
+            logger.BlobDownloaded(sourceBlobRef.BlobName, message.MessageId, queue.Name,
+                downloaded.Value.Details.ETag.ToString(), downloaded.GetRawResponse().Headers.RequestId);
         }
         catch (RequestFailedException ex) when (ex is { Status: 404, ErrorCode: "BlobNotFound" })
         {
             await DeleteMissingBlobMessage(message, sourceBlobRef, ex, ct);
             return null;
         }
-        await destinationBlobClient.UploadAsync(content, ct);
+        logger.UploadingBlob(newBlobRef.BlobName, queue.Name, content.ToMemory().Length);
+        var uploaded = await destinationBlobClient.UploadAsync(content, ct);
+        logger.BlobUploaded(newBlobRef.BlobName, queue.Name, uploaded.Value.ETag.ToString(), uploaded.GetRawResponse().Headers.RequestId);
 
-        logger.LogInformation("Copied blob {SourceBlob} to {DestBlob} for quarantine message {MsgId}",
-            sourceBlobRef.BlobName, newBlobRef.BlobName, message.MessageId);
+        logger.BlobCopiedForQuarantine(sourceBlobRef.BlobName, newBlobRef.BlobName, message.MessageId);
 
         return newBlobRef;
     }
@@ -182,10 +197,12 @@ public class MessageQueue<T>
             if (!response.HasValue || response.Value.Length == 0)
                 return;
 
+            LogReceivedMessages(quarantineQueue, response.Value);
             foreach (var msg in response.Value)
             {
-                await queue.SendMessageAsync(msg.Body, TimeSpan.Zero, cancellationToken: ct);
-                await quarantineQueue.DeleteMessageAsync(msg.MessageId, msg.PopReceipt, ct);
+                IsBlobRef(msg.Body, out var blobRef);
+                await SendPayload(queue, msg.Body, blobRef?.BlobName, ct, TimeSpan.Zero);
+                await DeleteQueueMessage(quarantineQueue, new MessageId(msg.MessageId, msg.PopReceipt, blobRef?.BlobName), ct);
             }
         } while (!ct.IsCancellationRequested);
     }
@@ -193,7 +210,7 @@ public class MessageQueue<T>
     public async Task QuarantineData(T item, CancellationToken ct)
     {
         var payload = await SerializeAndOffloadIfBig(item, ct: ct);
-        await quarantineQueue.SendMessageAsync(payload.Data, cancellationToken: ct);
+        await SendPayload(quarantineQueue, payload.Data, payload.BlobName, ct);
     }
 
     async Task<QueueMessage<T>?> ToQueueMessage(QueueMessage m, CancellationToken ct, bool fromQuarantine = false)
@@ -205,6 +222,8 @@ public class MessageQueue<T>
             {
                 var blobData = await container.GetBlobClient(blobRef!.BlobName).DownloadContentAsync(ct);
                 payload = blobData.Value.Content;
+                logger.BlobDownloaded(blobRef.BlobName, m.MessageId, fromQuarantine ? quarantineQueue.Name : queue.Name,
+                    blobData.Value.Details.ETag.ToString(), blobData.GetRawResponse().Headers.RequestId);
             }
             catch (RequestFailedException ex) when (!fromQuarantine && ex is { Status: 404, ErrorCode: "BlobNotFound" })
             {
@@ -213,7 +232,7 @@ public class MessageQueue<T>
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Exception when loading blob {BlobName} for {MessageId}", blobRef!.BlobName, m.MessageId);
+                logger.BlobDownloadFailed(blobRef!.BlobName, m.MessageId, ex);
                 throw;
             }
         }
@@ -225,7 +244,7 @@ public class MessageQueue<T>
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Exception when deserializing a message {MessageId}", m.MessageId);
+            logger.MessageDeserializationFailed(m.MessageId, ex);
 
             if (!fromQuarantine)
                 await QuarantineMessage(m, ct);
@@ -241,10 +260,51 @@ public class MessageQueue<T>
 
     async Task DeleteMissingBlobMessage(QueueMessage message, BlobRef blobRef, RequestFailedException error, CancellationToken ct)
     {
-        await queue.DeleteMessageAsync(message.MessageId, message.PopReceipt, ct);
+        await DeleteQueueMessage(queue, new MessageId(message.MessageId, message.PopReceipt, blobRef.BlobName), ct);
 
-        logger.LogWarning(error, "Deleted message {MessageId} from queue {QueueName} because blob {BlobName} was not found.",
-            message.MessageId, queue.Name, blobRef.BlobName);
+        logger.MissingBlobMessageDeleted(message.MessageId, queue.Name, blobRef.BlobName, error);
+    }
+
+    async Task SendPayload(QueueClient target, BinaryData data, string? blobName, CancellationToken ct, TimeSpan? visibilityTimeout = null)
+    {
+        var operationId = Guid.NewGuid();
+        logger.SendingMessage(target.Name, blobName, operationId);
+        try
+        {
+            var sent = await target.SendMessageAsync(data, visibilityTimeout, cancellationToken: ct);
+            logger.MessageSent(sent.Value.MessageId, target.Name, blobName, operationId, sent.GetRawResponse().Headers.RequestId);
+        }
+        catch (RequestFailedException ex)
+        {
+            logger.MessageSendFailed(ex, target.Name, blobName, operationId, ex.Status, ex.ErrorCode, ex.GetRawResponse()?.Headers.RequestId);
+            throw;
+        }
+    }
+
+    async Task DeleteQueueMessage(QueueClient source, MessageId id, CancellationToken ct)
+    {
+        logger.DeletingMessage(id.Id, source.Name, id.BlobName);
+        await source.DeleteMessageAsync(id.Id, id.PopReceipt, ct);
+        logger.MessageDeleted(id.Id, source.Name, id.BlobName);
+    }
+
+    async Task DeleteBlob(MessageId id, CancellationToken ct)
+    {
+        logger.DeletingBlob(id.BlobName!, id.Id, queue.Name);
+        var deleted = await container.DeleteBlobIfExistsAsync(id.BlobName!, cancellationToken: ct);
+        logger.BlobDeleted(id.BlobName!, id.Id, queue.Name, deleted.Value, deleted.GetRawResponse().Headers.RequestId);
+    }
+
+    void LogReceivedMessages(QueueClient source, QueueMessage[] messages)
+    {
+        if (!logger.IsEnabled(LogLevel.Information))
+            return;
+
+        foreach (var message in messages)
+        {
+            IsBlobRef(message.Body, out var blobRef);
+            logger.MessageReceived(message.MessageId, source.Name, blobRef?.BlobName, message.DequeueCount);
+        }
     }
 
     static bool IsBlobRef(BinaryData data, out BlobRef? o)
@@ -265,12 +325,14 @@ public class MessageQueue<T>
 
     public async Task Delete(bool deleteBlobs = false)
     {
+        logger.DeletingQueueStorage(queue.Name, deleteBlobs);
         var tasks = new List<Task> { queue.DeleteAsync(), quarantineQueue.DeleteAsync() };
 
         if (deleteBlobs)
             tasks.Add(container.DeleteAsync());
 
         await Task.WhenAll(tasks);
+        logger.QueueStorageDeleted(queue.Name, deleteBlobs);
     }
 
     public async Task ClearMessages() => await queue.ClearMessagesAsync();
@@ -288,13 +350,13 @@ public class MessageQueue<T>
         static string FileName() => $"{DateTime.UtcNow:yyyy-MM-dd}/{DateTime.UtcNow:s}{Guid.NewGuid():N}.json.gzip";
     }
 
-    record Payload(BinaryData Data, bool Offloaded)
+    record Payload(BinaryData Data, bool Offloaded, string? BlobName = null)
     {
         public static Payload FitsInMessage(MemoryStream stream) =>
             new(BinaryData.FromStream(stream), false);
 
         public static Payload OffloadedToBlob(BlobRef blobRef) =>
-            new(BinaryData.FromObjectAsJson(blobRef), true);
+            new(BinaryData.FromObjectAsJson(blobRef), true, blobRef.BlobName);
     }
 }
 

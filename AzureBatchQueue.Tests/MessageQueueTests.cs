@@ -6,6 +6,7 @@ using Azure.Storage.Queues.Models;
 using AzureBatchQueue.JsonNet;
 using AzureBatchQueue.Tests.Serializers;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace AzureBatchQueue.Tests;
@@ -150,6 +151,8 @@ public class MessageQueueTests
     public async Task When_quarantine_large_message()
     {
         using var queueTest = await Queue<string>(maxDequeueCount: 0); // quarantine after first read
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
 
         var largeMessage = new string('*', 65 * 1024);
         await queueTest.Queue.Send(largeMessage);
@@ -159,6 +162,9 @@ public class MessageQueueTests
         var msgFromQuarantine = (await queueTest.Queue.ReceiveFromQuarantine()).Single();
         msgFromQuarantine.Item.Should().Be(largeMessage);
         msgFromQuarantine.MessageId.BlobName.Should().NotBeEmpty();
+        var copy = logger.Entries.Single(x => x.Name == "BlobCopiedForQuarantine");
+        copy.Fields["DestBlob"].Should().Be(msgFromQuarantine.MessageId.BlobName);
+        copy.Fields["SourceBlob"].Should().Be(logger.Entries.Single(x => x.Name == "BlobDeleted").Fields["BlobName"]);
     }
 
     [Test]
@@ -241,6 +247,104 @@ public class MessageQueueTests
         (await queueTest.MessageCount()).Should().Be(0);
     }
 
+    [Test]
+    public async Task When_processing_a_blob_logs_its_message_and_lifecycle()
+    {
+        using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
+
+        await queueTest.Queue.Send(new string('*', 65 * 1024));
+        var message = (await queueTest.Queue.Receive()).Single();
+        await queueTest.Queue.DeleteMessage(message.MessageId);
+
+        var events = logger.Entries.Where(x => Equals(x.Fields.GetValueOrDefault("BlobName"), message.MessageId.BlobName)).ToArray();
+        events.Select(x => x.Name).Should().ContainInOrder("UploadingBlob", "BlobUploaded", "SendingMessage", "MessageSent",
+            "MessageReceived", "DeletingMessage", "MessageDeleted", "DeletingBlob", "BlobDeleted");
+        events.Single(x => x.Name == "MessageSent").Fields["MessageId"].Should().Be(message.MessageId.Id);
+        events.Single(x => x.Name == "BlobDeleted").Fields["Deleted"].Should().Be(true);
+    }
+
+    [TestCase(1024)]
+    [TestCase(65 * 1024)]
+    public async Task When_updating_a_blob_logs_the_payload_reference(int size)
+    {
+        using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
+        await queueTest.Queue.Send(new string('*', 65 * 1024));
+        var original = (await queueTest.Queue.Receive()).Single();
+
+        await queueTest.Queue.UpdateMessage(original.MessageId, new string('+', size));
+        var updated = (await queueTest.Queue.Receive()).Single();
+
+        var change = logger.Entries.Single(x => x.Name == "MessageUpdated");
+        change.Fields["MessageId"].Should().Be(original.MessageId.Id);
+        change.Fields["BlobName"].Should().Be(updated.MessageId.BlobName);
+        logger.Entries.Count(x => x.Name == "BlobDeleted").Should().Be(size == 1024 ? 1 : 0);
+    }
+
+    [Test]
+    public async Task When_sending_fails_logs_the_blob_and_operation()
+    {
+        using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
+        await queueTest.RawQueue.DeleteAsync();
+        try
+        {
+            var error = Assert.ThrowsAsync<RequestFailedException>(async () => await queueTest.Queue.Send(new string('*', 65 * 1024)));
+
+            var failed = logger.Entries.Single(x => x.Name == "MessageSendFailed");
+            failed.Fields["OperationId"].Should().Be(logger.Entries.Single(x => x.Name == "SendingMessage").Fields["OperationId"]);
+            failed.Fields["BlobName"].Should().Be(logger.Entries.Single(x => x.Name == "BlobUploaded").Fields["BlobName"]);
+            failed.Exception.Should().BeSameAs(error);
+        }
+        finally
+        {
+            await queueTest.Init();
+        }
+    }
+
+    [Test]
+    public async Task When_messages_share_a_blob_logs_both_ids_and_who_deletes_it()
+    {
+        using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
+        await queueTest.Queue.Send(new string('*', 65 * 1024));
+        var original = (await queueTest.RawQueue.PeekMessagesAsync(1)).Value.Single();
+        await queueTest.RawQueue.SendMessageAsync(original.Body);
+
+        var messages = await queueTest.Queue.Receive(2);
+        await queueTest.Queue.DeleteMessage(messages[0].MessageId);
+
+        var received = logger.Entries.Where(x => x.Name == "MessageReceived").ToArray();
+        received.Select(x => x.Fields["MessageId"]).Should().BeEquivalentTo(messages.Select(x => x.MessageId.Id));
+        received.Select(x => x.Fields["BlobName"]).Should().OnlyContain(x => Equals(x, messages[0].MessageId.BlobName));
+        logger.Entries.Single(x => x.Name == "BlobDeleted").Fields["MessageId"].Should().Be(messages[0].MessageId.Id);
+
+        await queueTest.Queue.UpdateMessage(messages[1].MessageId, null);
+        (await queueTest.Queue.Receive()).Should().BeEmpty();
+        logger.Entries.Single(x => x.Name == "MissingBlobMessageDeleted").Fields["MessageId"].Should().Be(messages[1].MessageId.Id);
+    }
+
+    sealed record LogEntry(string Name, Dictionary<string, object?> Fields, Exception? Exception);
+
+    sealed class RecordingLogger : ILogger
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<LogEntry> Entries { get; } = new();
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var fields = ((IEnumerable<KeyValuePair<string, object?>>)state!).ToDictionary(x => x.Key, x => x.Value);
+            Entries.Enqueue(new LogEntry(eventId.Name ?? "", fields, exception));
+        }
+    }
+
     static async Task<QueueTest<T>> Queue<T>(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
     {
         var queue = new QueueTest<T>(maxDequeueCount, serializer);
@@ -250,7 +354,6 @@ public class MessageQueueTests
 
     class QueueTest<T> : IDisposable
     {
-        readonly QueueClient rawQueue;
         readonly QueueClient quarantineQueue;
 
         public QueueTest(int maxDequeueCount = 5, IMessageQueueSerializer<T>? serializer = null)
@@ -258,18 +361,19 @@ public class MessageQueueTests
             var connection = Environment.GetEnvironmentVariable("AZURE_BATCH_QUEUE_TEST_CONNECTION") ?? "UseDevelopmentStorage=true";
             Queue = new MessageQueue<T>(connection, "test", maxDequeueCount: maxDequeueCount, serializer: serializer);
             var options = new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 };
-            rawQueue = new QueueClient(connection, "test", options);
+            RawQueue = new QueueClient(connection, "test", options);
             quarantineQueue = new QueueClient(connection, "test-quarantine", options);
             Blobs = new BlobContainerClient(connection, "overflow-test");
         }
 
         public async Task Init() => await Queue.Init();
         public MessageQueue<T> Queue { get; }
+        public QueueClient RawQueue { get; }
         public BlobContainerClient Blobs { get; }
 
         public async Task DeleteMessageBlob(bool fromQuarantine = false)
         {
-            var queue = fromQuarantine ? quarantineQueue : rawQueue;
+            var queue = fromQuarantine ? quarantineQueue : RawQueue;
             var message = (await queue.PeekMessagesAsync(1)).Value.Single();
             using var envelope = JsonDocument.Parse(message.Body.ToString());
             await Blobs.DeleteBlobAsync(envelope.RootElement.GetProperty("__MSQ_QUEUE_BLOBNAME__").GetString()!);
@@ -277,7 +381,7 @@ public class MessageQueueTests
 
         public async Task<int> MessageCount(bool fromQuarantine = false)
         {
-            var queue = fromQuarantine ? quarantineQueue : rawQueue;
+            var queue = fromQuarantine ? quarantineQueue : RawQueue;
             return (await queue.GetPropertiesAsync()).Value.ApproximateMessagesCount;
         }
 
