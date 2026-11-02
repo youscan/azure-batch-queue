@@ -57,9 +57,15 @@ jobs:
         run: |
           dotnet pack --no-restore --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg -p:PackageVersion=${{ steps.vars.outputs.tag }} -o output/${{ steps.vars.outputs.tag }} AzureBatchQueue/
           dotnet pack --no-restore --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg -p:PackageVersion=${{ steps.vars.outputs.tag }} -o output/${{ steps.vars.outputs.tag }} AzureBatchQueue.JsonNet/
+      - name: NuGet login
+        if: steps.vars.outputs.tag != null
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ytYouScan
       - name: Push packages
         if: steps.vars.outputs.tag != null
-        run: dotnet nuget push output/${{ steps.vars.outputs.tag }}/*.nupkg --api-key ${{ secrets.NUGET_API_TOKEN }} --source https://api.nuget.org/v3/index.json
+        run: dotnet nuget push output/${{ steps.vars.outputs.tag }}/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
       - name: Create release
         if: steps.vars.outputs.tag != null
         uses: softprops/action-gh-release@v3
