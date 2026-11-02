@@ -58,16 +58,15 @@ internal class TimerBatch<T>
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "QueueNotFound")
         {
-            logger.LogWarning(ex, "Queue {queueName} was not found when flushing {messageId} with {itemsCount} items left.",
-                batchQueue.Name, msg.MessageId, items.NotProcessedCount());
+            logger.QueueNotFoundOnFlush(ex, batchQueue.Name, msg.MessageId, items.NotProcessedCount());
         }
         catch (Azure.RequestFailedException ex) when (ex.ErrorCode == "MessageNotFound")
         {
-            logger.LogError(ex, "Accessing already flushed message with {messageId}.", msg.MessageId);
+            logger.FlushedMessageAccessed(ex, msg.MessageId);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled exception when flushing message {messageId}.", msg.MessageId);
+            logger.FlushFailed(ex, msg.MessageId);
             throw;
         }
 
@@ -95,8 +94,7 @@ internal class TimerBatch<T>
                 var remaining = Remaining();
                 await batchQueue.UpdateMessage(msg.MessageId, remaining);
 
-                logger.LogWarning("Message {MsgId} was not fully processed within a timeout ({FlushPeriod}) sec in queue {QueueName}." +
-                                  " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total",
+                logger.BatchIncomplete(
                     msg.MessageId,
                     FlushPeriod.TotalSeconds,
                     batchQueue.Name,
@@ -110,7 +108,7 @@ internal class TimerBatch<T>
             {
                 await batchQueue.DeleteMessage(msg.MessageId);
 
-                logger.LogDebug("Message {msgId} was fully processed with {totalCount} items", msg.MessageId, items.Items().Length);
+                logger.BatchProcessed(msg.MessageId, items.Items().Length);
             }
 
             async Task Quarantine()
@@ -118,8 +116,7 @@ internal class TimerBatch<T>
                 var remaining = Remaining();
                 await batchQueue.QuarantineData(msg.MessageId, remaining);
 
-                logger.LogInformation("Message {MsgId} was quarantined after {DequeueCount} unsuccessful attempts in queue {QueueName}." +
-                                      " {RemainingCount} items were not completed ({NotProcessed} not processed on time and {FailedCount} failed) from {TotalCount} total",
+                logger.BatchQuarantined(
                     msg.MessageId,
                     msg.Metadata.DequeueCount,
                     batchQueue.Name,
@@ -197,9 +194,8 @@ internal class TimerBatch<T>
         if (visibilityTimeout >= TimeSpan.FromSeconds(1))
             return visibilityTimeout.Subtract(TimeSpan.FromMilliseconds(100));
 
-        logger.LogError("VisibilityTimeout {VisibilityTimeout} cannot be less that 1 sec." +
-                        " UtcNow: {UtcNow}, MessageVisibleTime: {MessageVisibleTime}, InsertedOn: {InsertedOn}",
-            visibilityTimeout, DateTimeOffset.UtcNow.ToString("O"), Metadata.VisibilityTime.ToString("O"), Metadata.InsertedOn.ToString("O"));
+        logger.InvalidVisibilityTimeout(visibilityTimeout, DateTimeOffset.UtcNow.ToString("O"),
+            Metadata.VisibilityTime.ToString("O"), Metadata.InsertedOn.ToString("O"));
 
         throw new ArgumentOutOfRangeException(nameof(visibilityTimeout));
     }
