@@ -265,6 +265,39 @@ public class MessageQueueTests
         events.Single(x => x.Name == "BlobDeleted").Fields["Deleted"].Should().Be(true);
     }
 
+    [Test]
+    public async Task When_deleting_a_message_whose_blob_is_already_gone()
+    {
+        using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger();
+        queueTest.Queue.WithLogger(logger);
+        await queueTest.Queue.Send(new string('*', 65 * 1024));
+        var message = (await queueTest.Queue.Receive()).Single();
+        await queueTest.Blobs.DeleteBlobAsync(message.MessageId.BlobName);
+
+        await queueTest.Queue.DeleteMessage(message.MessageId);
+
+        (await queueTest.MessageCount()).Should().Be(0);
+        var deleted = logger.Entries.Single(x => x.Name == "BlobDeleted");
+        deleted.Fields["Deleted"].Should().Be(false);
+        deleted.Fields["RequestId"].Should().BeNull();
+    }
+
+    [Test]
+    public async Task When_updating_to_a_small_message_whose_blob_is_already_gone()
+    {
+        using var queueTest = await Queue<string>();
+        await queueTest.Queue.Send(new string('*', 65 * 1024));
+        var original = (await queueTest.Queue.Receive()).Single();
+        await queueTest.Blobs.DeleteBlobAsync(original.MessageId.BlobName);
+
+        await queueTest.Queue.UpdateMessage(original.MessageId, "small");
+
+        var updated = (await queueTest.Queue.Receive()).Single();
+        updated.Item.Should().Be("small");
+        updated.MessageId.BlobName.Should().BeNull();
+    }
+
     [TestCase(1024)]
     [TestCase(65 * 1024)]
     public async Task When_updating_a_blob_logs_the_payload_reference(int size)

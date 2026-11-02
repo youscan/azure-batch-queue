@@ -63,11 +63,7 @@ public class MessageQueue<T>
         await queue.UpdateMessageAsync(id.Id, id.PopReceipt, payload.Data, visibilityTimeout, ct);
         logger.MessageUpdated(id.Id, queue.Name, payload.BlobName, id.BlobName);
         if (!payload.Offloaded && id.BlobName != null)
-        {
-            logger.DeletingBlob(id.BlobName, id.Id, queue.Name);
-            var deleted = await container.DeleteBlobAsync(id.BlobName, cancellationToken: ct);
-            logger.BlobDeleted(id.BlobName, id.Id, queue.Name, true, deleted.Headers.RequestId);
-        }
+            await DeleteBlob(id, ct);
     }
 
     async Task<Payload> SerializeAndOffloadIfBig(T item, string? blobName = null, CancellationToken ct = default)
@@ -292,7 +288,7 @@ public class MessageQueue<T>
     {
         logger.DeletingBlob(id.BlobName!, id.Id, queue.Name);
         var deleted = await container.DeleteBlobIfExistsAsync(id.BlobName!, cancellationToken: ct);
-        logger.BlobDeleted(id.BlobName!, id.Id, queue.Name, deleted.Value, deleted.GetRawResponse().Headers.RequestId);
+        logger.BlobDeleted(id.BlobName!, id.Id, queue.Name, deleted.Value, deleted.GetRawResponse()?.Headers.RequestId);
     }
 
     void LogReceivedMessages(QueueClient source, QueueMessage[] messages)
