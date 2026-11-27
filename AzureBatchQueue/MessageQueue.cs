@@ -293,7 +293,7 @@ public class MessageQueue<T>
 
     void LogReceivedMessages(QueueClient source, QueueMessage[] messages)
     {
-        if (!logger.IsEnabled(LogLevel.Information))
+        if (!logger.IsEnabled(LogLevel.Debug))
             return;
 
         foreach (var message in messages)
