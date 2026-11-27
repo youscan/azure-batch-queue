@@ -179,10 +179,13 @@ public class MessageQueueTests
         Assert.DoesNotThrowAsync(async () => await gZipQueue.Queue.Receive());
     }
 
-    [Test]
-    public async Task When_receiving_a_missing_blob_returns_healthy_messages()
+    [TestCase(LogLevel.Information)]
+    [TestCase(LogLevel.Warning)]
+    public async Task When_receiving_a_missing_blob_returns_healthy_messages(LogLevel minimumLevel)
     {
         using var queueTest = await Queue<string>();
+        var logger = new RecordingLogger(minimumLevel);
+        queueTest.Queue.WithLogger(logger);
         await queueTest.Queue.Send(new string('*', 65 * 1024));
         await queueTest.DeleteMessageBlob();
         var largeMessage = new string('h', 65 * 1024);
@@ -194,6 +197,10 @@ public class MessageQueueTests
         messages.Select(x => x.Item).Should().BeEquivalentTo(new[] { "healthy-inline", largeMessage });
         (await queueTest.MessageCount()).Should().Be(2);
         (await queueTest.MessageCount(fromQuarantine: true)).Should().Be(0);
+        var warning = logger.Entries.Should().ContainSingle().Subject;
+        warning.Name.Should().Be("MissingBlobMessageDeleted");
+        warning.Level.Should().Be(LogLevel.Warning);
+        warning.Exception.Should().BeOfType<RequestFailedException>();
     }
 
     [Test]
@@ -317,11 +324,12 @@ public class MessageQueueTests
         logger.Entries.Count(x => x.Name == "BlobDeleted").Should().Be(size == 1024 ? 1 : 0);
     }
 
-    [Test]
-    public async Task When_sending_fails_logs_the_blob_and_operation()
+    [TestCase(LogLevel.Debug)]
+    [TestCase(LogLevel.Information)]
+    public async Task When_sending_fails_logs_the_blob_and_operation(LogLevel minimumLevel)
     {
         using var queueTest = await Queue<string>();
-        var logger = new RecordingLogger();
+        var logger = new RecordingLogger(minimumLevel);
         queueTest.Queue.WithLogger(logger);
         await queueTest.RawQueue.DeleteAsync();
         try
@@ -329,9 +337,17 @@ public class MessageQueueTests
             var error = Assert.ThrowsAsync<RequestFailedException>(async () => await queueTest.Queue.Send(new string('*', 65 * 1024)));
 
             var failed = logger.Entries.Single(x => x.Name == "MessageSendFailed");
-            failed.Fields["OperationId"].Should().Be(logger.Entries.Single(x => x.Name == "SendingMessage").Fields["OperationId"]);
-            failed.Fields["BlobName"].Should().Be(logger.Entries.Single(x => x.Name == "BlobUploaded").Fields["BlobName"]);
+            failed.Level.Should().Be(LogLevel.Error);
+            failed.Fields["OperationId"].Should().BeOfType<Guid>().Which.Should().NotBeEmpty();
+            failed.Fields["BlobName"].Should().BeOfType<string>().Which.Should().NotBeEmpty();
             failed.Exception.Should().BeSameAs(error);
+            if (minimumLevel == LogLevel.Debug)
+            {
+                failed.Fields["OperationId"].Should().Be(logger.Entries.Single(x => x.Name == "SendingMessage").Fields["OperationId"]);
+                failed.Fields["BlobName"].Should().Be(logger.Entries.Single(x => x.Name == "BlobUploaded").Fields["BlobName"]);
+            }
+            else
+                logger.Entries.Should().ContainSingle();
         }
         finally
         {
@@ -362,19 +378,65 @@ public class MessageQueueTests
         logger.Entries.Single(x => x.Name == "MissingBlobMessageDeleted").Fields["MessageId"].Should().Be(messages[1].MessageId.Id);
     }
 
-    sealed record LogEntry(string Name, Dictionary<string, object?> Fields, Exception? Exception);
+    [TestCase(1024)]
+    [TestCase(65 * 1024)]
+    public async Task When_processing_messages_at_information_level_does_not_log_lifecycle(int updatedSize)
+    {
+        var logger = new RecordingLogger(LogLevel.Information);
+        using (var queueTest = await Queue<string>())
+        {
+            queueTest.Queue.WithLogger(logger);
+            await queueTest.Queue.Send(new string('*', 65 * 1024));
+            var original = (await queueTest.Queue.Receive()).Single();
 
-    sealed class RecordingLogger : ILogger
+            await queueTest.Queue.UpdateMessage(original.MessageId, new string('+', updatedSize));
+            var updated = (await queueTest.Queue.Receive()).Single();
+            await queueTest.Queue.DeleteMessage(updated.MessageId);
+        }
+
+        logger.Entries.Should().BeEmpty();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task When_quarantining_after_exhausted_attempts_logs_warning(bool batched)
+    {
+        using var queueTest = await Queue<string>(maxDequeueCount: 0);
+        var logger = new RecordingLogger(LogLevel.Information);
+        queueTest.Queue.WithLogger(logger);
+
+        if (batched)
+        {
+            var batchQueue = new BatchQueue<string>("UseDevelopmentStorage=true", queueTest.Queue.Name,
+                maxDequeueCount: 1, logger: logger);
+            await batchQueue.Send(new[] { "failed" });
+            var item = (await batchQueue.Receive()).Single();
+            item.Fail();
+        }
+        else
+        {
+            await queueTest.Queue.Send("failed");
+            await queueTest.Queue.Receive();
+        }
+
+        var eventName = batched ? "BatchQuarantined" : "MessageQuarantined";
+        Assert.That(() => logger.Entries.SingleOrDefault(x => x.Name == eventName)?.Level,
+            Is.EqualTo(LogLevel.Warning).After(3000, 10));
+    }
+
+    sealed record LogEntry(string Name, LogLevel Level, Dictionary<string, object?> Fields, Exception? Exception);
+
+    sealed class RecordingLogger(LogLevel minimumLevel = LogLevel.Debug) : ILogger
     {
         public System.Collections.Concurrent.ConcurrentQueue<LogEntry> Entries { get; } = new();
-        public bool IsEnabled(LogLevel logLevel) => true;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= minimumLevel;
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
             var fields = ((IEnumerable<KeyValuePair<string, object?>>)state!).ToDictionary(x => x.Key, x => x.Value);
-            Entries.Enqueue(new LogEntry(eventId.Name ?? "", fields, exception));
+            Entries.Enqueue(new LogEntry(eventId.Name ?? "", logLevel, fields, exception));
         }
     }
 
